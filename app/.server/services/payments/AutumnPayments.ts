@@ -243,6 +243,8 @@ export const makeAutumnPayments = Effect.fnUntraced(function* (options: AutumnPa
 
       // Consume the order's single credit. The Idempotency-Key makes repeats
       // (webhook + sweeper + page load) land once; a repeat answers 409.
+      // Payment is already proven and the customer exists only for this order,
+      // so a failed consume is bookkeeping, not a reason to keep the buyer waiting.
       yield* autumn
         .post(
           "balances.track",
@@ -256,7 +258,13 @@ export const makeAutumnPayments = Effect.fnUntraced(function* (options: AutumnPa
         )
         .pipe(
           Effect.catchTag("AutumnError", (error) =>
-            error.status === 409 ? Effect.logDebug("Autumn track: already consumed", { code: error.code }) : Effect.fail(error),
+            error.status === 409
+              ? Effect.logDebug("Autumn track: already consumed", { code: error.code })
+              : Effect.logWarning("Autumn track failed after payment was confirmed", {
+                  orderId: input.orderId,
+                  status: error.status,
+                  code: error.code,
+                }),
           ),
         );
       return "paid" as const;

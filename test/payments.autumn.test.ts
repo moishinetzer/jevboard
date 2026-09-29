@@ -453,13 +453,12 @@ describe("AutumnPayments.confirm", () => {
     }),
   );
 
-  it.effect("a failed consume is not reported as paid", () =>
+  it.effect("a failed consume after proven payment still reports paid (per-order customer, no double spend)", () =>
     Effect.gen(function* () {
       const fake = fakeAutumn((call) =>
         call.path === "/v1/customers.get" ? { status: 200, body: paidCustomer } : { status: 500, body: { message: "boom" } },
       );
-      const error = yield* confirm(fake).pipe(Effect.flip);
-      assert.strictEqual(error._tag, "PaymentError");
+      assert.strictEqual(yield* confirm(fake), "paid");
       // Every retry reuses the same key, so Autumn applies the consumption at most once.
       const tracks = fake.calls.filter((c) => c.path === "/v1/balances.track");
       assert.strictEqual(tracks.length, 4);
