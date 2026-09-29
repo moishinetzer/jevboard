@@ -7,8 +7,11 @@ import { Crawler } from "./Crawler";
 import { Judge } from "./Judge";
 import { Orders } from "./Orders";
 
-/** An in-flight judgment untouched for this long is considered abandoned and may be re-claimed. */
-export const CLAIM_STALE_MS = 10 * 60 * 1000;
+/**
+ * An in-flight judgment untouched for this long is considered abandoned and
+ * may be re-claimed (a single judging job is bounded well below this).
+ */
+export const CLAIM_STALE_MS = 20 * 60 * 1000;
 
 /** Up to 2 retries with jittered exponential backoff for transient failures. */
 const transientRetry = Schedule.max([Schedule.exponential("1 second").pipe(Schedule.jittered), Schedule.recurs(2)]);
@@ -46,6 +49,8 @@ const crawlFailureMessage = (error: CrawlError): string => {
       return "That URL isn't a web page Jev can read.";
     case "too-large":
       return "Your homepage is too heavy for Jev to lift.";
+    case "offsite":
+      return `Your site ${error.message} now, so Jev can't judge it as itself. Submit the site it lands on.`;
     default:
       return `Jev couldn't reach your site (${error.message}).`;
   }
@@ -73,9 +78,13 @@ export type JudgeStageResult = "judged" | "skipped" | "failed";
 export class Pipeline extends Context.Service<
   Pipeline,
   {
-    readonly judge: (orderId: OrderId) => Effect.Effect<JudgeStageResult>;
+    /** Stage 1. Fails only with retryable Jev errors (defects also escape) — retry the job. */
+    readonly judge: (orderId: OrderId) => Effect.Effect<JudgeStageResult, JudgeError>;
+    /** Stage 2. Idempotent; defects escape so the job is retried. */
     readonly place: (orderId: OrderId) => Effect.Effect<void>;
-    /** Both stages back to back (in-process queue, tests). */
+    /** Marks the order failed once its job ran out of retries. */
+    readonly giveUp: (orderId: OrderId) => Effect.Effect<void>;
+    /** Both stages back to back, failures handled (in-process queue, tests). */
     readonly run: (orderId: OrderId) => Effect.Effect<void>;
   }
 >()("jevboard/Pipeline") {
@@ -155,51 +164,102 @@ export class Pipeline extends Context.Service<
         return { tieOrder, duels };
       });
 
+      /**
+       * Stage 1: crawl + verdict, parked on the order. Only the job holding the
+       * claim may write, so a duplicate or stale job can't clobber progress.
+       *
+       * Fails the order for definitive problems (unreachable site, refusal).
+       * Retryable Jev errors and infrastructure defects release the claim and
+       * escape, so the queue retries the job with backoff.
+       */
       const judgeStage = Effect.fn("Pipeline.judge")(function* (orderId: OrderId) {
         const order = yield* orders.get(orderId);
         if (order.status === "pending_payment" || TERMINAL_STATUSES.includes(order.status)) return "skipped" as const;
         if (Option.isSome(yield* orders.stagedVerdict(orderId))) return "judged" as const;
-        // Someone else is already on it (duplicate delivery) unless it went quiet.
-        if (!(yield* orders.claim(orderId, Date.now() - CLAIM_STALE_MS))) return "skipped" as const;
-        const host = hostOf(order.url);
+        const claimed = yield* orders.claim(orderId, Date.now() - CLAIM_STALE_MS);
+        if (Option.isNone(claimed)) return "skipped" as const; // another job owns it
+        const token = claimed.value;
 
-        yield* orders.setStage(orderId, "crawling", `Jev is knocking on ${host}…`);
-        const snapshot = yield* crawler.crawl(order.url).pipe(
-          Effect.retry({
-            schedule: transientRetry,
-            while: (error: CrawlError) => error.reason === "timeout" || error.reason === "unreachable",
-          }),
-        );
-        const pageList = snapshot.pages.map((page) => new URL(page.url).pathname).join(", ");
-
-        const existing = yield* board.findBySiteKey(order.siteKey);
-        const roll = (Option.isSome(existing) ? existing.value.rolls : 0) + 1;
-        yield* orders.setStage(
-          orderId,
-          "judging",
-          `Jev read ${snapshot.pages.length} page${snapshot.pages.length === 1 ? "" : "s"} (${pageList}). Deliberating…`,
-        );
-        const result = yield* judge
-          .judge({ siteKey: order.siteKey, url: order.url, snapshot, roll, fresh: order.kind === "reroll" })
-          .pipe(Effect.retry({ schedule: transientRetry, while: (error: JudgeError) => error.retryable }));
-
-        yield* orders.stageVerdict(orderId, {
-          verdict: result.verdict,
-          model: result.model,
-          pagesCrawled: [...new Set([...snapshot.pages.map((page) => page.url), ...result.pagesFetchedByJev])],
-          ogImage: snapshot.ogImage,
+        const work = Effect.gen(function* () {
+          const host = hostOf(order.url);
+          yield* orders.setStage(orderId, "crawling", `Jev is knocking on ${host}…`, token);
+          const snapshot = yield* crawler.crawl(order.url).pipe(
+            Effect.retry({
+              schedule: transientRetry,
+              while: (error: CrawlError) => error.reason === "timeout" || error.reason === "unreachable",
+            }),
+          );
+          const pageList = snapshot.pages.map((page) => new URL(page.url).pathname).join(", ");
+          const roll = (yield* board.rollsFor(order.siteKey)) + 1;
+          yield* orders.setStage(
+            orderId,
+            "judging",
+            `Jev read ${snapshot.pages.length} page${snapshot.pages.length === 1 ? "" : "s"} (${pageList}). Deliberating…`,
+            token,
+          );
+          // One attempt per job: a retryable failure goes back to the queue,
+          // which keeps each job inside the consumer's wall-clock limit.
+          const result = yield* judge.judge({
+            siteKey: order.siteKey,
+            url: order.url,
+            snapshot,
+            roll,
+            fresh: roll > 1,
+          });
+          const staged = yield* orders.stageVerdict(
+            orderId,
+            {
+              verdict: result.verdict,
+              model: result.model,
+              pagesCrawled: [...new Set([...snapshot.pages.map((page) => page.url), ...result.pagesFetchedByJev])],
+              ogImage: snapshot.ogImage,
+            },
+            token,
+          );
+          if (!staged) return "skipped" as const; // lost the claim while working
+          yield* orders.setStage(
+            orderId,
+            "tiebreaking",
+            `Jev scored it ${result.verdict.score}/1000. Finding its place on the board…`,
+            token,
+          );
+          return "judged" as const;
         });
-        yield* orders.setStage(
-          orderId,
-          "tiebreaking",
-          `Jev scored it ${result.verdict.score}/1000. Finding its place on the board…`,
+
+        return yield* work.pipe(
+          Effect.catchTags({
+            CrawlError: (error) =>
+              Effect.logWarning("Crawl failed", error).pipe(
+                Effect.andThen(orders.fail(orderId, crawlFailureMessage(error), token)),
+                Effect.as("failed" as const),
+              ),
+            JudgeError: (error) =>
+              error.retryable
+                ? orders.release(orderId, token).pipe(Effect.andThen(Effect.fail(error)))
+                : Effect.logError("Judge failed", error).pipe(
+                    Effect.andThen(orders.fail(orderId, judgeFailureMessage(error), token)),
+                    Effect.as("failed" as const),
+                  ),
+          }),
+          Effect.tapCause((cause) =>
+            Cause.hasDies(cause) ? orders.release(orderId, token) : Effect.void,
+          ),
         );
-        return "judged" as const;
       });
 
+      /**
+       * Stage 2: tiebreak duels + placement. Runs one at a time (placement
+       * queue) and is idempotent: a judgment already written for this order
+       * just completes it.
+       */
       const placeStage = Effect.fn("Pipeline.place")(function* (orderId: OrderId) {
         const order = yield* orders.get(orderId);
         if (order.status === "pending_payment" || TERMINAL_STATUSES.includes(order.status)) return;
+        const existing = yield* board.judgmentForOrder(orderId);
+        if (Option.isSome(existing)) {
+          yield* orders.complete(orderId, { entryId: existing.value.entryId, judgmentId: existing.value.id });
+          return;
+        }
         const staged = yield* orders.stagedVerdict(orderId);
         if (Option.isNone(staged)) {
           return yield* Effect.logWarning("Placement requested before a verdict was staged", { orderId });
@@ -219,7 +279,6 @@ export class Pipeline extends Context.Service<
           tieOrder,
           duels,
         });
-        yield* orders.complete(orderId, { entryId: placement.entryId, judgmentId: placement.judgmentId });
         yield* Effect.logInfo("Judgment placed", {
           siteKey: placement.siteKey,
           score: placement.score,
@@ -228,43 +287,40 @@ export class Pipeline extends Context.Service<
         });
       });
 
-      /** Maps failures to a failed order (with a friendly reason) so the buyer can retry for free. */
-      const guard = <A, E>(orderId: OrderId, onFailure: A, effect: Effect.Effect<A, E>): Effect.Effect<A> =>
-        effect.pipe(
-          Effect.catchCause((cause) => {
-            // On shutdown/eviction the order stays in flight; the queue or cron retries it.
-            if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt;
-            const error = Cause.findErrorOption(cause);
-            const tag = Option.isSome(error) ? (error.value as { readonly _tag?: string })._tag : undefined;
-            if (tag === "NotFound") return Effect.logWarning("Order vanished", { orderId }).pipe(Effect.as(onFailure));
-            const message =
-              tag === "CrawlError"
-                ? crawlFailureMessage(Option.getOrThrow(error) as unknown as CrawlError)
-                : tag === "JudgeError"
-                  ? judgeFailureMessage(Option.getOrThrow(error) as unknown as JudgeError)
-                  : "Something broke inside Jev. Retry for free — you already paid.";
-            return Effect.logError("Judgment failed", cause).pipe(
-              Effect.andThen(orders.fail(orderId, message)),
-              Effect.as(onFailure),
-            );
-          }),
+      const judgeJob = (orderId: OrderId) =>
+        judgeStage(orderId).pipe(
+          Effect.catchTag("NotFound", () => Effect.logWarning("Order vanished", { orderId }).pipe(Effect.as("skipped" as const))),
           Effect.annotateLogs({ orderId }),
+          Effect.withSpan("Pipeline.judgeJob"),
         );
 
-      const judgeGuarded = (orderId: OrderId) =>
-        guard(orderId, "failed" as JudgeStageResult, judgeStage(orderId)).pipe(Effect.withSpan("Pipeline.judgeJob"));
-
-      const placeGuarded = (orderId: OrderId) =>
-        guard(orderId, undefined as void, Semaphore.withPermit(placementLock)(placeStage(orderId))).pipe(
+      const placeJob = (orderId: OrderId) =>
+        Semaphore.withPermit(placementLock)(placeStage(orderId)).pipe(
+          Effect.catchTag("NotFound", () => Effect.logWarning("Order vanished", { orderId })),
+          Effect.annotateLogs({ orderId }),
           Effect.withSpan("Pipeline.placeJob"),
         );
 
+      /** Marks a paid order failed after its job exhausted every retry. */
+      const giveUp = (orderId: OrderId) =>
+        orders.fail(orderId, "Something broke inside Jev. Retry for free — you already paid.");
+
       return Pipeline.of({
-        judge: judgeGuarded,
-        place: placeGuarded,
+        judge: judgeJob,
+        place: placeJob,
+        giveUp,
         run: (orderId) =>
-          judgeGuarded(orderId).pipe(
-            Effect.flatMap((result) => (result === "judged" ? placeGuarded(orderId) : Effect.void)),
+          judgeJob(orderId).pipe(
+            // In-process there is no queue to retry with: a retryable failure ends the order.
+            Effect.catchTag("JudgeError", (error) =>
+              orders.fail(orderId, judgeFailureMessage(error)).pipe(Effect.as("failed" as const)),
+            ),
+            Effect.flatMap((result) => (result === "judged" ? placeJob(orderId) : Effect.void)),
+            Effect.catchCause((cause) =>
+              Cause.hasInterruptsOnly(cause)
+                ? Effect.interrupt
+                : Effect.logError("Judgment failed", cause).pipe(Effect.andThen(giveUp(orderId))),
+            ),
           ),
       });
     }),

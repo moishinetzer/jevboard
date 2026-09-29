@@ -2,7 +2,7 @@ import { Context, Effect, Layer, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { JUDGMENT_PRICE_CENTS } from "~/lib/format";
 import { NotFound } from "../domain/errors";
-import { type CustomerId, type EntryId, type JudgmentId, makeOrderId, type OrderId } from "../domain/ids";
+import { type CustomerId, type EntryId, type JudgmentId, makeOrderId, type OrderId, randomId } from "../domain/ids";
 import { IN_FLIGHT_STATUSES, type Order, type OrderKind, type OrderStatus, Verdict } from "../domain/models";
 
 interface OrderRow {
@@ -73,12 +73,17 @@ export class Orders extends Context.Service<
     readonly find: (id: string) => Effect.Effect<Option.Option<Order>>;
     /** pending_payment -> paid. Returns false if the order was not pending (already paid). */
     readonly markPaid: (id: OrderId) => Effect.Effect<boolean>;
-    readonly setStage: (id: OrderId, status: OrderStatus, detail: string | null) => Effect.Effect<void>;
-    readonly setDetail: (id: OrderId, detail: string) => Effect.Effect<void>;
+    /**
+     * Progress updates. Never touch finished orders; when `token` is given,
+     * only the job holding that claim may write (a stale job is ignored).
+     */
+    readonly setStage: (id: OrderId, status: OrderStatus, detail: string | null, token?: string) => Effect.Effect<void>;
+    readonly setDetail: (id: OrderId, detail: string, token?: string) => Effect.Effect<void>;
     readonly complete: (id: OrderId, result: { readonly entryId: EntryId; readonly judgmentId: JudgmentId }) => Effect.Effect<void>;
-    readonly fail: (id: OrderId, error: string) => Effect.Effect<void>;
+    readonly fail: (id: OrderId, error: string, token?: string) => Effect.Effect<void>;
     /** Parks Jev's verdict on the order until the placement stage picks it up. */
-    readonly stageVerdict: (id: OrderId, staged: StagedVerdict) => Effect.Effect<void>;
+    /** First writer wins; returns false if this job no longer owns the order or a verdict is already parked. */
+    readonly stageVerdict: (id: OrderId, staged: StagedVerdict, token: string) => Effect.Effect<boolean>;
     /** The parked verdict, if the judging stage already finished. */
     readonly stagedVerdict: (id: OrderId) => Effect.Effect<Option.Option<StagedVerdict>>;
     /**
@@ -86,14 +91,16 @@ export class Orders extends Context.Service<
      * paid, or in flight but untouched since `staleBefore` (a lost worker).
      * Queues deliver at least once; this keeps duplicate jobs from crawling twice.
      */
-    readonly claim: (id: OrderId, staleBefore: number) => Effect.Effect<boolean>;
+    readonly claim: (id: OrderId, staleBefore: number) => Effect.Effect<Option.Option<string>>;
+    /** Gives a claimed order back (status `paid`) so a queue retry can claim it right away. */
+    readonly release: (id: OrderId, token: string) => Effect.Effect<void>;
     /** In-flight orders not touched since `before` (epoch ms) — re-queued by the cron trigger. */
     readonly stalled: (before: number) => Effect.Effect<ReadonlyArray<Order>>;
     /** failed -> paid, so a paid-for judgment can be retried for free. */
     readonly retry: (id: OrderId) => Effect.Effect<boolean>;
     /** Orders a worker must (re)process, oldest first — used on boot for crash recovery. */
     readonly inFlight: Effect.Effect<ReadonlyArray<Order>>;
-    /** Unpaid orders created after `since` (epoch ms), oldest first — for the payment sweeper. */
+    /** Unpaid orders created after `since` (epoch ms), newest first — for the payment sweeper. */
     readonly awaitingPayment: (since: number) => Effect.Effect<ReadonlyArray<Order>>;
     /** Recent orders for a customer (so the home page can say "your judgment is still cooking"). */
     readonly recentForCustomer: (customerId: string, limit: number) => Effect.Effect<ReadonlyArray<Order>>;
@@ -156,18 +163,27 @@ export class Orders extends Context.Service<
         return rows.length > 0;
       }, Effect.orDie);
 
+      /** Guards shared by every progress write. */
+      const writable = (token: string | undefined) =>
+        token === undefined
+          ? sql`status NOT IN ('complete', 'failed')`
+          : sql`status NOT IN ('complete', 'failed') AND claim_token = ${token}`;
+
       const setStage = Effect.fn("Orders.setStage")(function* (
         id: OrderId,
         status: OrderStatus,
         detail: string | null,
+        token?: string,
       ) {
         yield* sql`
           UPDATE orders SET status = ${status}, stage_detail = ${detail}, error = NULL, updated_at = ${Date.now()}
-          WHERE id = ${id}`;
+          WHERE id = ${id} AND ${writable(token)}`;
       }, Effect.orDie);
 
-      const setDetail = Effect.fn("Orders.setDetail")(function* (id: OrderId, detail: string) {
-        yield* sql`UPDATE orders SET stage_detail = ${detail}, updated_at = ${Date.now()} WHERE id = ${id}`;
+      const setDetail = Effect.fn("Orders.setDetail")(function* (id: OrderId, detail: string, token?: string) {
+        yield* sql`
+          UPDATE orders SET stage_detail = ${detail}, updated_at = ${Date.now()}
+          WHERE id = ${id} AND ${writable(token)}`;
       }, Effect.orDie);
 
       const complete = Effect.fn("Orders.complete")(function* (
@@ -177,24 +193,30 @@ export class Orders extends Context.Service<
         const now = Date.now();
         yield* sql`
           UPDATE orders
-          SET status = 'complete', stage_detail = 'Jev has spoken.', error = NULL,
+          SET status = 'complete', stage_detail = 'Jev has spoken.', error = NULL, claim_token = NULL,
               entry_id = ${result.entryId}, judgment_id = ${result.judgmentId},
               completed_at = ${now}, updated_at = ${now}
-          WHERE id = ${id}`;
+          WHERE id = ${id} AND status NOT IN ('complete', 'failed')`;
       }, Effect.orDie);
 
-      const fail = Effect.fn("Orders.fail")(function* (id: OrderId, error: string) {
+      const fail = Effect.fn("Orders.fail")(function* (id: OrderId, error: string, token?: string) {
         yield* sql`
-          UPDATE orders SET status = 'failed', error = ${error}, updated_at = ${Date.now()}
-          WHERE id = ${id}`;
+          UPDATE orders SET status = 'failed', error = ${error}, claim_token = NULL, updated_at = ${Date.now()}
+          WHERE id = ${id} AND ${writable(token)}`;
       }, Effect.orDie);
 
-      const stageVerdict = Effect.fn("Orders.stageVerdict")(function* (id: OrderId, staged: StagedVerdict) {
-        yield* sql`
+      const stageVerdict = Effect.fn("Orders.stageVerdict")(function* (
+        id: OrderId,
+        staged: StagedVerdict,
+        token: string,
+      ) {
+        const rows = yield* sql<{ id: string }>`
           UPDATE orders SET verdict_json = ${JSON.stringify(staged.verdict)}, model = ${staged.model},
             pages_crawled = ${JSON.stringify(staged.pagesCrawled)}, og_image = ${staged.ogImage},
             updated_at = ${Date.now()}
-          WHERE id = ${id}`;
+          WHERE id = ${id} AND verdict_json IS NULL AND ${writable(token)}
+          RETURNING id`;
+        return rows.length > 0;
       }, Effect.orDie);
 
       const stagedVerdict = Effect.fn("Orders.stagedVerdict")(function* (id: OrderId) {
@@ -215,12 +237,19 @@ export class Orders extends Context.Service<
 
       const claim = Effect.fn("Orders.claim")(function* (id: OrderId, staleBefore: number) {
         const now = Date.now();
+        const token = randomId(16);
         const rows = yield* sql<{ id: string }>`
-          UPDATE orders SET status = 'crawling', updated_at = ${now}
+          UPDATE orders SET status = 'crawling', claim_token = ${token}, updated_at = ${now}
           WHERE id = ${id}
             AND (status = 'paid' OR (status IN ('crawling', 'judging') AND updated_at < ${staleBefore}))
           RETURNING id`;
-        return rows.length > 0;
+        return rows.length > 0 ? Option.some(token) : Option.none<string>();
+      }, Effect.orDie);
+
+      const release = Effect.fn("Orders.release")(function* (id: OrderId, token: string) {
+        yield* sql`
+          UPDATE orders SET status = 'paid', claim_token = NULL, updated_at = ${Date.now()}
+          WHERE id = ${id} AND claim_token = ${token} AND status NOT IN ('complete', 'failed')`;
       }, Effect.orDie);
 
       const stalled = Effect.fn("Orders.stalled")(function* (before: number) {
@@ -233,7 +262,7 @@ export class Orders extends Context.Service<
       const retry = Effect.fn("Orders.retry")(function* (id: OrderId) {
         const rows = yield* sql<{ id: string }>`
           UPDATE orders
-          SET status = 'paid', error = NULL, verdict_json = NULL,
+          SET status = 'paid', error = NULL, verdict_json = NULL, claim_token = NULL,
               stage_detail = 'Retrying. Jev is giving it another go.', updated_at = ${Date.now()}
           WHERE id = ${id} AND status = 'failed'
           RETURNING id`;
@@ -250,7 +279,7 @@ export class Orders extends Context.Service<
       const awaitingPayment = Effect.fn("Orders.awaitingPayment")(function* (since: number) {
         const rows = yield* sql<OrderRow>`
           SELECT * FROM orders WHERE status = 'pending_payment' AND created_at >= ${since}
-          ORDER BY created_at ASC LIMIT 200`;
+          ORDER BY created_at DESC LIMIT 100`;
         return rows.map(toOrder);
       }, Effect.orDie);
 
@@ -274,6 +303,7 @@ export class Orders extends Context.Service<
         stageVerdict,
         stagedVerdict,
         claim,
+        release,
         stalled,
         retry,
         inFlight,

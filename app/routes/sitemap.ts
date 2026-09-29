@@ -11,7 +11,7 @@ export const loader = effectLoader("sitemap", () =>
   Effect.gen(function* () {
     const { origin } = yield* CurrentRequest;
     const board = yield* Board;
-    const { entries } = yield* board.page({ page: 1, pageSize: 200 });
+    const entries = yield* board.sitemap;
     const urls = [
       ...["/", "/hall", "/stats", "/faq"].map((path) => ({ loc: `${origin}${path}`, lastmod: null as number | null })),
       ...entries.map((entry) => ({ loc: `${origin}${entryPath(entry.siteKey)}`, lastmod: entry.lastJudgedAt })),

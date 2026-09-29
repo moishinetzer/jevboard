@@ -67,6 +67,7 @@ const PATH_TENANT_HOSTS: Record<string, number> = {
   "crates.io": 2,
 };
 const HOST_LABEL = /^(?!-)[a-z0-9-]{1,63}(?<!-)$/;
+const TENANT_SEGMENT = /^[a-z0-9._~@+-]{1,64}$/i;
 const BLOCKED_SUFFIXES = [
   ".local",
   ".localhost",
@@ -113,6 +114,10 @@ export const normalizeSite = (
     .split("/")
     .filter((segment) => segment.length > 0)
     .slice(0, tenantSegments);
+  // Tenant paths become part of the site key and of Jev's prompt: keep them boring.
+  if (segments.some((segment) => !TENANT_SEGMENT.test(safeDecodePath(segment)))) {
+    return { ok: false, error: "invalid" };
+  }
   const path = segments.length > 0 ? `/${segments.join("/")}` : "";
   const cleanPath = safeDecodePath(path).toLowerCase();
   const siteKey = cleanPath.length > 0 ? `${host}${cleanPath}` : host;

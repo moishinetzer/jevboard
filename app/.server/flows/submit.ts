@@ -31,6 +31,8 @@ const preflightMessage = (error: CrawlError): string => {
       return `That site answered with an error (${error.message}). Fix it before Jev sees it.`;
     case "not-html":
       return "That URL isn't a web page. Jev judges websites, not files.";
+    case "offsite":
+      return `That address ${error.message}. Submit the site it lands on instead.`;
     default:
       return "Jev couldn't reach that site. Double-check the URL.";
   }
@@ -44,8 +46,11 @@ const preflightMessage = (error: CrawlError): string => {
 export const submitSite = Effect.fn("submitSite")(function* (rawUrl: string) {
   const request = yield* CurrentRequest;
   const limiter = yield* RateLimiter;
+  // Cookie-less requests get no visitor bucket of their own (a fresh id each
+  // time would never hit a limit): they only count against their IP.
   const allowed =
-    (yield* limiter.allow("visitor", request.visitorId)) && (yield* limiter.allow("ip", request.clientIp));
+    (request.visitorIsNew || (yield* limiter.allow("visitor", request.visitorId))) &&
+    (yield* limiter.allow("ip", request.clientIp));
   if (!allowed) {
     return {
       ok: false,

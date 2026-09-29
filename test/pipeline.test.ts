@@ -1,10 +1,11 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
+import { SqlClient } from "effect/sql";
 import { CustomerId, type OrderId } from "~/.server/domain/ids";
 import { Board } from "~/.server/services/Board";
 import { Orders } from "~/.server/services/Orders";
 import { Pipeline } from "~/.server/services/Pipeline";
-import { makeTestLayer, type Script } from "./support/layers";
+import { makeTestLayer, type Script, verdictFor } from "./support/layers";
 
 const customer = CustomerId.make("cTestCustomer0000000000");
 
@@ -215,6 +216,40 @@ describe("Pipeline", () => {
       const board = yield* Board;
       assert.strictEqual((yield* board.getBySiteKey("dup.com")).rolls, 1);
       assert.strictEqual((yield* board.stats).judgments, 1);
+    }).pipe(Effect.provide(makeTestLayer(s)));
+  });
+
+  it.effect("a stale job can't overwrite the new owner's work or reopen a finished order", () => {
+    const s = script({ scores: { "race.com": [500] } });
+    return Effect.gen(function* () {
+      const orders = yield* Orders;
+      const sql = yield* SqlClient.SqlClient;
+      const order = yield* orders.create({
+        customerId: customer,
+        siteKey: "race.com",
+        url: "https://race.com/",
+        kind: "new",
+        entryId: null,
+      });
+      yield* orders.markPaid(order.id);
+      const a = Option.getOrThrow(yield* orders.claim(order.id, Date.now() - 60_000));
+      // A goes quiet; B re-claims after the stale window.
+      yield* sql`UPDATE orders SET updated_at = ${Date.now() - 3_600_000} WHERE id = ${order.id}`;
+      const b = Option.getOrThrow(yield* orders.claim(order.id, Date.now() - 60_000));
+      assert.notStrictEqual(a, b);
+
+      const staged = { verdict: verdictFor("race.com", 500), model: "m", pagesCrawled: [], ogImage: null };
+      assert.isFalse(yield* orders.stageVerdict(order.id, staged, a)); // stale job loses
+      assert.isTrue(yield* orders.stageVerdict(order.id, staged, b));
+      assert.isFalse(yield* orders.stageVerdict(order.id, staged, b)); // first writer wins
+
+      yield* (yield* Pipeline).place(order.id);
+      assert.strictEqual((yield* orders.get(order.id)).status, "complete");
+      // Late progress writes from A (or anyone) can't reopen it.
+      yield* orders.setStage(order.id, "tiebreaking", "late", a);
+      yield* orders.setStage(order.id, "tiebreaking", "late");
+      yield* orders.fail(order.id, "late");
+      assert.strictEqual((yield* orders.get(order.id)).status, "complete");
     }).pipe(Effect.provide(makeTestLayer(s)));
   });
 });

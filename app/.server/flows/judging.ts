@@ -50,6 +50,17 @@ const stepIndex = (status: OrderStatus): number => {
   }
 };
 
+/** The page polls every ~1.5 s; ask the payment provider at most every few seconds per order (per isolate). */
+const PAYMENT_CHECK_INTERVAL_MS = 4000;
+const lastPaymentCheck = new Map<string, number>();
+const shouldCheckPayment = (orderId: string): boolean => {
+  const now = Date.now();
+  if (now - (lastPaymentCheck.get(orderId) ?? 0) < PAYMENT_CHECK_INTERVAL_MS) return false;
+  if (lastPaymentCheck.size > 5000) lastPaymentCheck.clear();
+  lastPaymentCheck.set(orderId, now);
+  return true;
+};
+
 /**
  * Loads an order for the judging page. When the buyer lands here from
  * checkout, this is also where payment is confirmed (one credit consumed,
@@ -60,7 +71,7 @@ export const loadJudging = Effect.fn("loadJudging")(function* (orderId: string) 
   const queue = yield* JudgmentQueue;
   let order = yield* orders.get(orderId);
 
-  if (order.status === "pending_payment") {
+  if (order.status === "pending_payment" && shouldCheckPayment(order.id)) {
     const payments = yield* Payments;
     const paid = yield* payments.confirm({ orderId: order.id, customerId: order.customerId }).pipe(
       Effect.catchTag("PaymentError", (error) =>

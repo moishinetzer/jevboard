@@ -26,7 +26,17 @@ export interface ShellData {
   readonly now: number;
 }
 
-export const loadCounters = Effect.gen(function* () {
+/** Per-isolate cache: every open tab polls the feed, the counters needn't be fresher than this. */
+const COUNTERS_TTL_MS = 3000;
+let countersCache: { readonly at: number; readonly value: LiveCounters } | undefined;
+
+export const loadCounters = Effect.suspend(() =>
+  countersCache && Date.now() - countersCache.at < COUNTERS_TTL_MS
+    ? Effect.succeed(countersCache.value)
+    : computeCounters.pipe(Effect.tap((value) => Effect.sync(() => (countersCache = { at: Date.now(), value })))),
+);
+
+const computeCounters = Effect.gen(function* () {
   const board = yield* Board;
   const stats = yield* board.stats;
   const online = yield* (yield* Presence).online;

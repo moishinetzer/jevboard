@@ -34,12 +34,24 @@ export const handleQueueBatch = (batch: MessageBatch<JudgmentJob>) =>
         }
       });
 
+    // Keep in sync with max_retries in wrangler.jsonc.
+    const maxAttempts = placement ? 10 : 3;
+
     for (const message of batch.messages) {
       const exit = yield* Effect.exit(process(message));
-      if (Exit.isSuccess(exit)) message.ack();
-      else {
-        yield* Effect.logError("Queue job failed; retrying", { queue: batch.queue, attempts: message.attempts }, exit.cause);
-        message.retry({ delaySeconds: Math.min(60, 5 * message.attempts) });
+      if (Exit.isSuccess(exit)) {
+        message.ack();
+        continue;
+      }
+      const job = decodeJob(message.body);
+      if (message.attempts >= maxAttempts && job._tag === "Some") {
+        // Out of retries: fail the order so the buyer can ask again for free.
+        yield* Effect.logError("Queue job gave up", { queue: batch.queue, attempts: message.attempts }, exit.cause);
+        yield* pipeline.giveUp(job.value.orderId);
+        message.ack();
+      } else {
+        yield* Effect.logWarning("Queue job failed; retrying", { queue: batch.queue, attempts: message.attempts }, exit.cause);
+        message.retry({ delaySeconds: Math.min(120, 10 * 2 ** (message.attempts - 1)) });
       }
     }
   }).pipe(Effect.withSpan("queue", { attributes: { queue: batch.queue, size: batch.messages.length } }));

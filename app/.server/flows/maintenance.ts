@@ -5,7 +5,9 @@ import { Orders } from "../services/Orders";
 import { CLAIM_STALE_MS } from "../services/Pipeline";
 
 /** Unpaid orders older than this are no longer swept (checkout sessions expire after ~1h). */
-const SWEEP_WINDOW_MS = 26 * 60 * 60 * 1000;
+const SWEEP_WINDOW_MS = 3 * 60 * 60 * 1000;
+/** Orders younger than this are checked every minute, older ones every 10 minutes. */
+const FRESH_ORDER_MS = 15 * 60 * 1000;
 /** An in-flight order untouched for this long is assumed lost and re-queued. */
 const STALL_MS = CLAIM_STALE_MS;
 /** Presence heartbeats older than this are pruned. */
@@ -24,7 +26,10 @@ export const runMaintenance = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const now = Date.now();
 
-  const unpaid = yield* orders.awaitingPayment(now - SWEEP_WINDOW_MS);
+  const everyTenMinutes = new Date(now).getUTCMinutes() % 10 === 0;
+  const unpaid = (yield* orders.awaitingPayment(now - SWEEP_WINDOW_MS)).filter(
+    (order) => everyTenMinutes || now - order.createdAt < FRESH_ORDER_MS,
+  );
   let settled = 0;
   for (const order of unpaid) {
     yield* queue.settle(order.id, order.customerId).pipe(

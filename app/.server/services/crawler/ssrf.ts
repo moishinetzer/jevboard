@@ -79,6 +79,11 @@ const IPV4_BLOCKED: ReadonlyArray<readonly [string, number]> = [
 const IPV6_BLOCKED: ReadonlyArray<readonly [string, number]> = [
   ["::", 96], // unspecified (::), loopback (::1) and deprecated IPv4-compatible (::a.b.c.d)
   ["64:ff9b::", 96], // NAT64: would reach arbitrary IPv4 through a translator
+  ["64:ff9b:1::", 48], // local-use NAT64 (RFC 8215)
+  ["::ffff:0:0:0", 96], // SIIT IPv4-translated addresses
+  ["100::", 64], // discard-only
+  ["2001::", 32], // Teredo (embeds an IPv4 server/client)
+  ["2002::", 16], // 6to4 (embeds an IPv4 address)
   ["2001:db8::", 32], // documentation
   ["fc00::", 7], // unique local
   ["fe80::", 10], // link-local

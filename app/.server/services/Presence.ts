@@ -6,7 +6,8 @@ const WINDOW_MS = 90_000;
 const WRITE_EVERY_MS = 30_000;
 
 /**
- * "N people watching right now": heartbeats stored in the `presence` table
+ * "N people watching right now" (and the unique-visitor count): heartbeats
+ * stored in the `presence` table
  * (shared by every Worker isolate), throttled per isolate so a busy page
  * doesn't turn into a write per request. The cron trigger prunes old rows.
  */
@@ -31,6 +32,8 @@ export class Presence extends Context.Service<
         yield* sql`
           INSERT INTO presence (visitor_id, last_seen_at) VALUES (${visitorId}, ${now})
           ON CONFLICT (visitor_id) DO UPDATE SET last_seen_at = excluded.last_seen_at`;
+        // Unique visitors ride on the same throttle.
+        yield* sql`INSERT OR IGNORE INTO visitors (id, first_seen_at) VALUES (${visitorId}, ${now})`;
       }, Effect.orDie);
 
       return Presence.of({

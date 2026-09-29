@@ -281,7 +281,13 @@ export class Board extends Context.Service<
     readonly recent: (limit: number) => Effect.Effect<ReadonlyArray<BoardEntry>>;
     /** Visible entries currently at `score`, best first, excluding the site being placed. */
     readonly tiedGroup: (score: number, excludeSiteKey: string) => Effect.Effect<ReadonlyArray<TiedEntry>>;
-    /** Atomically writes a finished judgment and its placement. */
+    /** The judgment already written for an order, if any (placement idempotency). */
+    readonly judgmentForOrder: (orderId: string) => Effect.Effect<Option.Option<{ readonly id: JudgmentId; readonly entryId: EntryId }>>;
+    /** Rolls so far for a site, counting entries hidden by a content flag. */
+    readonly rollsFor: (siteKey: string) => Effect.Effect<number>;
+    /** Every visible verdict page, for the sitemap. */
+    readonly sitemap: Effect.Effect<ReadonlyArray<{ readonly siteKey: string; readonly lastJudgedAt: number }>>;
+    /** Atomically writes a finished judgment, its placement and the order's completion. */
     readonly commitPlacement: (input: CommitPlacementInput) => Effect.Effect<PlacementResult>;
     readonly judgments: (entryId: EntryId) => Effect.Effect<ReadonlyArray<Judgment>>;
     readonly judgment: (id: string) => Effect.Effect<Option.Option<Judgment>>;
@@ -294,8 +300,6 @@ export class Board extends Context.Service<
     readonly neighbours: (entryId: EntryId, radius: number) => Effect.Effect<ReadonlyArray<BoardEntry>>;
     /** Counts an outbound visit and returns the URL to redirect to. */
     readonly recordClick: (siteKey: string) => Effect.Effect<Option.Option<string>>;
-    /** Registers a first-time visitor id (idempotent). */
-    readonly recordVisitor: (visitorId: string) => Effect.Effect<void>;
     /** Per-day judgments, rerolls and revenue for the last `days` days (UTC), oldest first. */
     readonly daily: (days: number) => Effect.Effect<ReadonlyArray<DailyStat>>;
     /** Categories that currently have at least one entry, with counts. */
@@ -343,8 +347,10 @@ export class Board extends Context.Service<
         const now = Date.now();
         const clauses: Array<Statement.Fragment> = [];
         if (query.length > 0) {
-          const like = `%${query.replace(/[%_]/g, "")}%`;
-          clauses.push(sql`(lower(site_key) LIKE ${like} OR lower(name) LIKE ${like} OR lower(category) LIKE ${like})`);
+          // instr() rather than LIKE: D1 caps LIKE patterns at 50 bytes.
+          clauses.push(
+            sql`(instr(lower(site_key), ${query}) > 0 OR instr(lower(name), ${query}) > 0 OR instr(lower(category), ${query}) > 0)`,
+          );
         }
         if (options.category) clauses.push(sql`category = ${options.category}`);
         if (sort === "today") clauses.push(sql`last_judged_at >= ${now - 24 * 3600 * 1000}`);
@@ -393,19 +399,26 @@ export class Board extends Context.Service<
       });
 
       const tiedGroup = Effect.fn("Board.tiedGroup")(function* (score: number, excludeSiteKey: string) {
-        const rows = yield* sql<EntryRow>`
-          SELECT * FROM entries
-          WHERE score = ${score} AND hidden = 0 AND site_key != ${excludeSiteKey}
-          ORDER BY tie_rank ASC, first_judged_at ASC`;
-        if (rows.length === 0) return [];
-        const judgments = yield* sql<JudgmentRow>`
-          SELECT * FROM judgments WHERE id IN ${sql.in(rows.map((row) => row.judgmentId))}`;
-        const byId = new Map(judgments.map((judgment) => [judgment.id, judgment]));
+        // One JOIN (not an IN list): D1 allows at most 100 bound parameters.
+        const rows = yield* sql<EntryRow & { jReasoning: string | null; jStrengths: string | null; jWeaknesses: string | null }>`
+          SELECT e.*, j.reasoning AS j_reasoning, j.strengths AS j_strengths, j.weaknesses AS j_weaknesses
+          FROM entries e LEFT JOIN judgments j ON j.id = e.judgment_id
+          WHERE e.score = ${score} AND e.hidden = 0 AND e.site_key != ${excludeSiteKey}
+          ORDER BY e.tie_rank ASC, e.first_judged_at ASC`;
         return rows.map(
           (row): TiedEntry => ({
             id: row.id as EntryId,
             siteKey: row.siteKey,
-            contender: contenderFor(row, byId.get(row.judgmentId)),
+            contender: {
+              siteKey: row.siteKey,
+              name: row.name,
+              label: row.label,
+              tldr: row.tldr,
+              category: row.category,
+              reasoning: row.jReasoning ?? row.verdict,
+              strengths: row.jStrengths ? parseList(row.jStrengths) : [],
+              weaknesses: row.jWeaknesses ? parseList(row.jWeaknesses) : [],
+            },
           }),
         );
       }, Effect.orDie);
@@ -679,6 +692,14 @@ export class Board extends Context.Service<
             }
           }
 
+          // The order completes in the same batch, so a crash can't leave a placed
+          // judgment behind an unfinished order (judgments.order_id is UNIQUE too).
+          writes.push(sql`
+            UPDATE orders
+            SET status = 'complete', stage_detail = 'Jev has spoken.', error = NULL, claim_token = NULL,
+                entry_id = ${entryId}, judgment_id = ${judgmentId}, completed_at = ${now}, updated_at = ${now}
+            WHERE id = ${input.orderId} AND status NOT IN ('complete', 'failed')`);
+
           yield* batch.run(writes);
 
           return {
@@ -695,6 +716,26 @@ export class Board extends Context.Service<
           } satisfies PlacementResult;
         },
         Effect.orDie,
+      );
+
+      const judgmentForOrder = Effect.fn("Board.judgmentForOrder")(function* (orderId: string) {
+        const rows = yield* sql<{ id: string; entryId: string }>`
+          SELECT id, entry_id FROM judgments WHERE order_id = ${orderId} LIMIT 1`;
+        return Option.map(Option.fromNullishOr(rows[0]), (row) => ({
+          id: row.id as JudgmentId,
+          entryId: row.entryId as EntryId,
+        }));
+      }, Effect.orDie);
+
+      const rollsFor = Effect.fn("Board.rollsFor")(function* (siteKey: string) {
+        const rows = yield* sql<{ rolls: number }>`SELECT rolls FROM entries WHERE site_key = ${siteKey}`;
+        return rows[0]?.rolls ?? 0;
+      }, Effect.orDie);
+
+      const sitemap = sql<{ siteKey: string; lastJudgedAt: number }>`
+        SELECT site_key, last_judged_at FROM entries WHERE hidden = 0 ORDER BY last_judged_at DESC LIMIT 50000`.pipe(
+        Effect.orDie,
+        Effect.withSpan("Board.sitemap"),
       );
 
       const judgments = Effect.fn("Board.judgments")(function* (entryId: EntryId) {
@@ -872,10 +913,6 @@ export class Board extends Context.Service<
         return Option.map(Option.fromNullishOr(rows[0]), (row) => row.url);
       }, Effect.orDie);
 
-      const recordVisitor = Effect.fn("Board.recordVisitor")(function* (visitorId: string) {
-        yield* sql`INSERT OR IGNORE INTO visitors (id, first_seen_at) VALUES (${visitorId}, ${Date.now()})`;
-      }, Effect.orDie);
-
       const categories = sql<{ category: string; count: number }>`
         SELECT category, COUNT(*) AS count FROM entries WHERE hidden = 0 GROUP BY category ORDER BY count DESC`.pipe(
         Effect.orDie,
@@ -903,9 +940,11 @@ export class Board extends Context.Service<
       }, Effect.orDie);
 
       return Board.of({
+        judgmentForOrder,
+        rollsFor,
+        sitemap,
         daily,
         recordClick,
-        recordVisitor,
         categories,
         findBySiteKey,
         getBySiteKey,

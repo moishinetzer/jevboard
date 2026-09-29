@@ -25,6 +25,7 @@ export const CrawlFailureReason = Schema.Literals([
   "http", // non-2xx after redirects
   "too-large",
   "not-html",
+  "offsite", // the homepage redirects to a different site
 ]);
 export type CrawlFailureReason = typeof CrawlFailureReason.Type;
 

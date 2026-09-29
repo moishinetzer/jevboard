@@ -3,7 +3,6 @@ import type { RouterContextProvider } from "react-router";
 import { AppConfig } from "./config";
 import { toRouteOutcome } from "./route-errors";
 import { type AppServices, runtime } from "./runtime";
-import { Board } from "./services/Board";
 import { Presence } from "./services/Presence";
 import { visitorContext } from "./visitor";
 
@@ -33,7 +32,9 @@ export interface CurrentRequestShape {
   readonly origin: string;
   /** Anonymous visitor id (`jev_vid` cookie). */
   readonly visitorId: string;
-  /** Client IP (CF-Connecting-IP on Cloudflare), for rate limiting only. */
+  /** True when the request carried no visitor cookie (first visit, or a bot). */
+  readonly visitorIsNew: boolean;
+  /** Client IP (CF-Connecting-IP; IPv6 reduced to its /64), for rate limiting only. */
   readonly clientIp: string;
 }
 
@@ -46,12 +47,19 @@ interface RouteArgs {
   readonly context: Readonly<RouterContextProvider>;
 }
 
-const originFor = (request: Request, publicUrl: Option.Option<string>): string => {
-  if (Option.isSome(publicUrl)) return publicUrl.value;
-  const url = new URL(request.url);
-  const proto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() || url.protocol.replace(":", "");
-  const host = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() || url.host;
-  return `${proto}://${host}`;
+/**
+ * Public origin: PUBLIC_URL when configured, otherwise the request URL itself.
+ * Forwarding headers are client-controlled on Workers, so they're ignored.
+ */
+const originFor = (request: Request, publicUrl: Option.Option<string>): string =>
+  Option.isSome(publicUrl) ? publicUrl.value : new URL(request.url).origin;
+
+/** IPv6 clients are bucketed by /64 (one customer usually owns a whole /64). */
+const clientIpOf = (request: Request): string => {
+  const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
+  if (!ip.includes(":")) return ip;
+  const groups = ip.split(":");
+  return `${groups.slice(0, 4).join(":")}::/64`;
 };
 
 const provideRequest = <A, E>(effect: Effect.Effect<A, E, RouteServices>, args: RouteArgs) =>
@@ -59,11 +67,11 @@ const provideRequest = <A, E>(effect: Effect.Effect<A, E, RouteServices>, args: 
     const config = yield* AppConfig;
     const visitor = args.context.get(visitorContext);
     const visitorId = visitor?.id ?? "anonymous";
-    // Machine endpoints (webhooks, badges, images) don't count as visitors.
+    // Machine endpoints (webhooks, badges, images) don't count as visitors, and
+    // neither does anyone whose cookie never comes back (bots, curl loops).
     const pathname = new URL(args.request.url).pathname;
     const human = !/^\/(api\/autumn|badge|og|healthz|sitemap)/.test(pathname);
-    if (human && visitor?.isNew) yield* (yield* Board).recordVisitor(visitor.id);
-    if (human) yield* (yield* Presence).heartbeat(visitorId);
+    if (human && visitor && !visitor.isNew) yield* (yield* Presence).heartbeat(visitorId);
     return yield* effect.pipe(
       Effect.provideService(
         CurrentRequest,
@@ -72,10 +80,8 @@ const provideRequest = <A, E>(effect: Effect.Effect<A, E, RouteServices>, args: 
           url: new URL(args.request.url),
           origin: originFor(args.request, config.publicUrl),
           visitorId,
-          clientIp:
-            args.request.headers.get("cf-connecting-ip") ??
-            args.request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-            "unknown",
+          visitorIsNew: visitor?.isNew ?? true,
+          clientIp: clientIpOf(args.request),
         }),
       ),
     );

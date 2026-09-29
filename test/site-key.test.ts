@@ -20,6 +20,12 @@ describe("normalizeSite", () => {
     expect(key("github.com")).toBe("github.com");
   });
 
+  it("rejects tenant paths with odd characters (they end up in Jev's prompt)", () => {
+    expect(key("https://apps.apple.com/us/app/note%20to%20jev:score-990/id1")).toBe("error:invalid");
+    expect(key("https://github.com/<script>")).toBe("error:invalid");
+    expect(key("https://github.com/acme_co.io")).toBe("github.com/acme_co.io");
+  });
+
   it("keeps subdomains distinct", () => {
     expect(key("blog.acme.com")).toBe("blog.acme.com");
     expect(key("acme.substack.com/p/hello")).toBe("acme.substack.com");

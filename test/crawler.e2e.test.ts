@@ -99,6 +99,9 @@ const server = createServer((req, res) => {
       return send(res, 307, { location: `${self}/#landed` });
     case "/loop":
       return send(res, 302, { location: "/loop" });
+    case "/elsewhere":
+      // Same server, different host name: counts as a different site.
+      return send(res, 301, { location: `${self.replace("127.0.0.1", "localhost")}/` });
     case "/no-location":
       return send(res, 302, {});
     case "/redirect-ftp":
@@ -242,6 +245,16 @@ describe("crawl (local server, private network allowed)", () => {
       const snapshot = yield* crawler.crawl(`${base}/start`);
       assert.strictEqual(snapshot.requestedUrl, `${base}/start`);
       assert.strictEqual(snapshot.finalUrl, `${base}/`);
+    }).pipe(Effect.provide(local())),
+  );
+
+  it.live("refuses a homepage that redirects to a different site", () =>
+    Effect.gen(function* () {
+      const crawler = yield* Crawler;
+      const preflight = yield* crawlError(crawler.preflight(`${base}/elsewhere`));
+      assert.strictEqual(preflight.reason, "offsite");
+      assert.match(preflight.message, /localhost/);
+      assert.strictEqual((yield* crawlError(crawler.crawl(`${base}/elsewhere`))).reason, "offsite");
     }).pipe(Effect.provide(local())),
   );
 

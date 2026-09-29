@@ -70,8 +70,8 @@ describe("maintenance (cron trigger)", () => {
         entryId: null,
       });
       yield* orders.markPaid(order.id);
-      // Simulate a worker that died while judging, 20 minutes ago.
-      yield* sql`UPDATE orders SET status = 'judging', updated_at = ${Date.now() - 20 * 60_000} WHERE id = ${order.id}`;
+      // Simulate a worker that died while judging, well past the stale window.
+      yield* sql`UPDATE orders SET status = 'judging', updated_at = ${Date.now() - 45 * 60_000} WHERE id = ${order.id}`;
       yield* runMaintenance;
       const done = yield* settled(order.id);
       assert.strictEqual(done.status, "complete");

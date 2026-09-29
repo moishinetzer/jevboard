@@ -1,6 +1,7 @@
 import { Clock, type Duration, Effect, Layer, Option } from "effect";
 import { AppConfig } from "../../config";
 import type { CrawledPage, SiteSnapshot } from "../../domain/models";
+import { CrawlError } from "../../domain/errors";
 import { Crawler, type CrawlOptions } from "../Crawler";
 import { makePageFetcher } from "./fetch";
 import { type ExtractedPage, extractPage } from "./html";
@@ -44,6 +45,22 @@ const toCrawledPage = (url: string, page: ExtractedPage): CrawledPage => ({
  * Builds the crawler service. Uses only web-standard APIs (global `fetch`,
  * streams, TextDecoder), so it runs on Cloudflare Workers as well as Node.
  */
+const bareHost = (url: string): string => new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+
+/**
+ * The defendant is the submitted site: a homepage that redirects to another
+ * site (acme.com → stripe.com) would otherwise be judged — and listed — on
+ * someone else's content. Moving between a domain and its subdomains
+ * (acme.com → app.acme.com) is fine.
+ */
+const ensureSameSite = (requested: string, final: string) => {
+  const from = bareHost(requested);
+  const to = bareHost(final);
+  return from === to || to.endsWith(`.${from}`) || from.endsWith(`.${to}`)
+    ? Effect.void
+    : Effect.fail(new CrawlError({ url: requested, reason: "offsite", message: `redirects to ${to}` }));
+};
+
 export const makeCrawler = (options: CrawlerOptions): Crawler["Service"] => {
   const pageTimeout = options.pageTimeout ?? DEFAULT_PAGE_TIMEOUT;
   const preflightTimeout = options.preflightTimeout ?? DEFAULT_PREFLIGHT_TIMEOUT;
@@ -55,6 +72,7 @@ export const makeCrawler = (options: CrawlerOptions): Crawler["Service"] => {
 
   const preflight = Effect.fn("Crawler.preflight")(function* (url: string) {
     const page = yield* fetchPage(url, preflightTimeout);
+    yield* ensureSameSite(url, page.url);
     return { finalUrl: page.url };
   });
 
@@ -63,6 +81,7 @@ export const makeCrawler = (options: CrawlerOptions): Crawler["Service"] => {
 
     // The homepage must load; everything else is best effort.
     const home = yield* fetchPage(url, pageTimeout);
+    yield* ensureSameSite(url, home.url);
     const homePage = extractPage(home.html, home.url, HOME_TEXT_CHARS);
 
     const targets = selectLinks(homePage.links, { pageUrl: home.url, scopeUrl: url, max: maxExtraPages });
