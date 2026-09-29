@@ -48,9 +48,9 @@ export default function Tv({ loaderData }: Route.ComponentProps) {
   return (
     <>
       <main ref={screen} style={ON_INK} className="flex min-h-[calc(100dvh-7rem)] flex-col overflow-x-hidden overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-[1920px] flex-1 flex-col gap-5 px-4 py-5 sm:px-6 lg:px-10 lg:py-8">
+        <div className="mx-auto flex w-full max-w-[1920px] flex-1 flex-col gap-4 px-4 py-5 sm:px-6 lg:px-10 lg:py-6">
           <header className="flex flex-wrap items-center justify-between gap-3">
-            <h1 className="flex items-center gap-3 font-display text-[clamp(2rem,4vw,4.5rem)] uppercase leading-none">
+            <h1 className="flex items-center gap-3 font-display text-[clamp(2rem,min(4vw,6vh),4.5rem)] uppercase leading-none">
               <span className="flex items-center gap-2 bg-hot px-2.5 py-1 text-[0.45em] text-white">
                 <span className="size-2.5 animate-blink rounded-full bg-white" aria-hidden />
                 Live
@@ -71,7 +71,7 @@ export default function Tv({ loaderData }: Route.ComponentProps) {
               </h2>
               <TvBoard entries={loaderData.top} />
             </section>
-            <div className="flex min-w-0 flex-col gap-5 pt-7">
+            <div className="flex min-w-0 flex-col gap-4 xl:pt-7">
               <KingPanel serverNow={loaderData.now} />
               <TvCounters />
               <TvFeed serverNow={loaderData.now} />

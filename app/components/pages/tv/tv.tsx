@@ -116,36 +116,36 @@ export function TvBoard({ entries }: { entries: ReadonlyArray<TvEntry> }) {
     );
   }
   return (
-    <ol className="flex flex-col gap-2" aria-label="Top 10">
+    <ol className="flex flex-col gap-1.5" aria-label="Top 10">
       {entries.map((entry) => {
         const tier = tierFor(entry.score);
         const move = moves.get(entry.siteKey);
         return (
           <li
             key={entry.siteKey}
-            className={`grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-[3px] border-line bg-card px-3 py-2 sm:gap-5 sm:px-4 ${
+            className={`grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-[3px] border-line bg-card px-3 py-[clamp(0.25rem,0.6vh,0.6rem)] sm:gap-5 sm:px-4 ${
               move !== undefined ? "animate-pop outline-4 outline-jev" : ""
             } ${entry.rank === 1 ? "shadow-[6px_6px_0_var(--jev)]" : ""}`}
           >
             <span
-              className="grid w-[clamp(2.75rem,5vw,5rem)] place-items-center border-[3px] border-[#111110] py-1 font-display text-[clamp(1.75rem,3.4vw,3.5rem)] leading-none"
+              className="grid w-[clamp(2.75rem,min(5vw,8vh),5rem)] place-items-center border-[3px] border-[#111110] py-1 font-display text-[clamp(1.75rem,min(3.4vw,4.6vh),3.5rem)] leading-none"
               style={{ background: tier.color, color: tier.ink }}
             >
               {entry.rank}
             </span>
-            <Link to={entryPath(entry.siteKey)} className={`flex min-w-0 flex-col gap-1 ${focusRing}`}>
+            <Link to={entryPath(entry.siteKey)} className={`flex min-w-0 flex-col gap-0.5 ${focusRing}`}>
               <span className="flex min-w-0 items-center gap-3">
                 <Favicon host={entry.siteKey.split("/")[0]!} size={32} className="hidden sm:grid" />
-                <span className="truncate text-[clamp(1.1rem,2.3vw,2.4rem)] font-bold leading-tight">{entry.siteKey}</span>
+                <span className="truncate text-[clamp(1.1rem,min(2vw,2.9vh),2.4rem)] font-bold leading-tight">{entry.siteKey}</span>
                 {move !== undefined ? (
                   <span className="sticker shrink-0">{move === 0 ? "New" : move > 0 ? `▲ ${move}` : `▼ ${-move}`}</span>
                 ) : null}
               </span>
-              <span className="truncate font-mono text-[clamp(0.7rem,1vw,0.95rem)] text-ink-soft">“{entry.label}”</span>
+              <span className="truncate font-mono text-[clamp(0.7rem,min(0.9vw,1.4vh),0.95rem)] leading-tight text-ink-soft">“{entry.label}”</span>
             </Link>
-            <span className="text-right">
-              <span className="score-num block text-[clamp(2.25rem,4.6vw,5rem)]">{entry.score}</span>
-              <span className="block font-mono text-[10px] font-bold text-ink-soft">/1000</span>
+            <span className="flex items-baseline gap-1">
+              <span className="score-num text-[clamp(2.25rem,min(4.2vw,5.6vh),5rem)]">{entry.score}</span>
+              <span className="hidden font-mono text-[10px] font-bold text-ink-soft sm:inline">/1000</span>
             </span>
           </li>
         );
@@ -170,10 +170,10 @@ export function KingPanel({ serverNow }: { serverNow: number }) {
       <p className="font-mono text-xs font-bold uppercase tracking-widest">Reign of #1</p>
       {king ? (
         <>
-          <p className="mt-2 break-words font-display text-[clamp(2rem,3.4vw,3.75rem)] uppercase leading-none">{king.siteKey}</p>
+          <p className="mt-2 break-words font-display text-[clamp(2rem,min(3.4vw,5vh),3.75rem)] uppercase leading-none">{king.siteKey}</p>
           <p className="mt-2 font-bold">{king.score}/1000</p>
-          <p className="mt-4 text-xs font-bold uppercase tracking-wide">Reigning for</p>
-          <p className="tabular text-[clamp(1.75rem,2.8vw,3rem)] font-bold leading-tight" suppressHydrationWarning>
+          <p className="mt-3 text-xs font-bold uppercase tracking-wide">Reigning for</p>
+          <p className="tabular text-[clamp(1.75rem,min(2.8vw,4.2vh),3rem)] font-bold leading-tight" suppressHydrationWarning>
             {formatClock(now - king.since)}
           </p>
         </>
@@ -186,12 +186,12 @@ export function KingPanel({ serverNow }: { serverNow: number }) {
 
 function Counter({ label, value, live = false }: { label: string; value: ReactNode; live?: boolean }) {
   return (
-    <div className="border-[3px] border-line bg-card p-3 sm:p-4">
+    <div className="border-[3px] border-line bg-card px-3 py-2.5 sm:px-4">
       <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-ink-soft">
         {live ? <span className="size-2 animate-blink rounded-full bg-hot" aria-hidden /> : null}
         {label}
       </p>
-      <p className="mt-1 font-display text-[clamp(2rem,3.2vw,3.5rem)] leading-none">{value}</p>
+      <p className="mt-1 font-display text-[clamp(2rem,min(3.2vw,4.6vh),3.5rem)] leading-none">{value}</p>
     </div>
   );
 }
@@ -209,7 +209,7 @@ export function TvCounters() {
 }
 
 /** The latest events, big. */
-export function TvFeed({ serverNow, limit = 6 }: { serverNow: number; limit?: number }) {
+export function TvFeed({ serverNow, limit = 3 }: { serverNow: number; limit?: number }) {
   const { tape, fresh } = useLive();
   const now = useNow(5000, serverNow);
   const events = tape.slice(0, limit);
@@ -249,7 +249,7 @@ export function TvMarquee() {
       </span>
     ));
   return (
-    <div className="flex overflow-hidden border-y-[3px] border-[#111110] bg-jev py-3 font-display text-[clamp(1.5rem,2.6vw,2.75rem)] uppercase text-[#111110]">
+    <div className="flex overflow-hidden border-y-[3px] border-[#111110] bg-jev py-2 font-display text-[clamp(1.5rem,min(2.6vw,4vh),2.75rem)] uppercase text-[#111110]">
       <div className="flex w-max animate-marquee" aria-hidden>
         {run(false)}
         {run(true)}
@@ -260,8 +260,8 @@ export function TvMarquee() {
 
 export function TvCallToAction({ host }: { host: string }) {
   return (
-    <div className="flex items-center gap-4 border-[3px] border-line bg-card p-4">
-      <JevFace size={64} className="shrink-0 animate-wiggle" />
+    <div className="flex items-center gap-4 border-[3px] border-line bg-card px-4 py-3">
+      <JevFace size={56} className="shrink-0 animate-wiggle" />
       <div className="min-w-0">
         <p className="font-display text-[clamp(1.4rem,2vw,2.25rem)] uppercase leading-none">Get judged at</p>
         <p className="truncate font-display text-[clamp(1.4rem,2vw,2.25rem)] uppercase leading-tight text-jev">{host}</p>
