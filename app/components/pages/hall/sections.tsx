@@ -69,7 +69,7 @@ const plural = (n: number, word: string) => `${formatCount(n)} ${word}${n === 1 
 export function HallOfFame({ entries }: { entries: ReadonlyArray<HallEntry> }) {
   if (entries.length === 0) return <EmptyNote>The docket is empty. Be the first defendant.</EmptyNote>;
   return (
-    <ol className="grid gap-3 lg:grid-cols-2">
+    <ol className="grid grid-cols-1 gap-3 lg:grid-cols-2">
       {entries.map((entry) => {
         const tier = tierFor(entry.score);
         return (
@@ -111,7 +111,7 @@ export function HallOfFame({ entries }: { entries: ReadonlyArray<HallEntry> }) {
 export function WallOfShame({ entries }: { entries: ReadonlyArray<HallEntry> }) {
   if (entries.length === 0) return <EmptyNote>Nobody has hit rock bottom yet. Give it time.</EmptyNote>;
   return (
-    <ol className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+    <ol className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
       {entries.map((entry, index) => (
         <li key={entry.siteKey} className="relative">
           <Link
@@ -270,7 +270,7 @@ export function Bribers({ entries, now }: { entries: ReadonlyArray<HallEntry>; n
     return <EmptyNote>Nobody has tried to bribe Jev yet. Jev is almost disappointed.</EmptyNote>;
   }
   return (
-    <ul className="grid gap-5 md:grid-cols-2">
+    <ul className="grid grid-cols-1 gap-5 md:grid-cols-2">
       {entries.map((entry) => (
         <li key={entry.siteKey}>
           <Link
@@ -310,7 +310,7 @@ export function DuelChampions({ champions }: { champions: ReadonlyArray<Champion
     return <EmptyNote>No exact-score ties yet, so the Duel Pit is quiet. Suspiciously quiet.</EmptyNote>;
   }
   return (
-    <ol className="grid gap-3 md:grid-cols-2">
+    <ol className="grid grid-cols-1 gap-3 md:grid-cols-2">
       {champions.map((champion, index) => {
         const fights = champion.wins + champion.losses;
         const rate = fights > 0 ? Math.round((champion.wins / fights) * 100) : 0;

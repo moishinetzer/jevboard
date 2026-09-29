@@ -136,7 +136,7 @@ export default function Hall({ loaderData }: Route.ComponentProps) {
           title="Retrial roulette"
           blurb="Every retrial is judged from scratch and the newest verdict stands, even when it's lower. These are the biggest swings."
         >
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <SwingList swings={data.jumps} direction="up" now={data.now} />
             <SwingList swings={data.drops} direction="down" now={data.now} />
           </div>
@@ -169,7 +169,7 @@ export default function Hall({ loaderData }: Route.ComponentProps) {
           <DuelChampions champions={data.champions} />
         </Exhibit>
 
-        <aside className="slab flex flex-col items-start gap-4 p-6 sm:flex-row sm:items-center sm:justify-between" style={{}}>
+        <aside className="slab flex flex-col items-start gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
           <p className="font-display text-3xl uppercase leading-tight sm:text-4xl">Want a place in history?</p>
           <Link to="/#judge" className={`btn px-6 py-3 text-lg ${focusRing}`}>
             Get judged — $5

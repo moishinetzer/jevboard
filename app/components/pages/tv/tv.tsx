@@ -19,19 +19,20 @@ export const toTvEntry = (entry: BoardEntry): TvEntry => ({
   lastDelta: entry.lastDelta,
 });
 
-/** Re-runs the route loader every `intervalMs` while the tab is visible. */
+/** Re-runs the route loader every `intervalMs` while the tab is visible; returns when data last landed. */
 export const useAutoRevalidate = (intervalMs: number): number => {
   const revalidator = useRevalidator();
   const [lastUpdated, setLastUpdated] = useState(() => Date.now());
-  const state = useRef(revalidator.state);
-  state.current = revalidator.state;
+  // The revalidator object isn't stable across renders; keep the latest in a ref.
+  const latest = useRef(revalidator);
+  latest.current = revalidator;
 
   useEffect(() => {
     const id = setInterval(() => {
-      if (document.visibilityState === "visible" && state.current === "idle") void revalidator.revalidate();
+      if (document.visibilityState === "visible" && latest.current.state === "idle") void latest.current.revalidate();
     }, intervalMs);
     return () => clearInterval(id);
-  }, [intervalMs, revalidator]);
+  }, [intervalMs]);
 
   useEffect(() => {
     if (revalidator.state === "idle") setLastUpdated(Date.now());
@@ -128,7 +129,7 @@ export function TvBoard({ entries }: { entries: ReadonlyArray<TvEntry> }) {
             } ${entry.rank === 1 ? "shadow-[6px_6px_0_var(--jev)]" : ""}`}
           >
             <span
-              className="grid w-[clamp(2.75rem,min(5vw,8vh),5rem)] place-items-center border-[3px] border-[#111110] py-1 font-display text-[clamp(1.75rem,min(3.4vw,4.6vh),3.5rem)] leading-none"
+              className="grid w-[clamp(2.75rem,min(5vw,8vh),5rem)] place-items-center border-[3px] border-[#111110] py-1 font-display text-[clamp(1.75rem,min(3.4vw,3.8vh),3.5rem)] leading-none"
               style={{ background: tier.color, color: tier.ink }}
             >
               {entry.rank}
@@ -136,7 +137,7 @@ export function TvBoard({ entries }: { entries: ReadonlyArray<TvEntry> }) {
             <Link to={entryPath(entry.siteKey)} className={`flex min-w-0 flex-col gap-0.5 ${focusRing}`}>
               <span className="flex min-w-0 items-center gap-3">
                 <Favicon host={entry.siteKey.split("/")[0]!} size={32} className="hidden sm:grid" />
-                <span className="truncate text-[clamp(1.1rem,min(2vw,2.9vh),2.4rem)] font-bold leading-tight">{entry.siteKey}</span>
+                <span className="truncate py-0.5 text-[clamp(1.1rem,min(2vw,2.9vh),2.4rem)] font-bold leading-none">{entry.siteKey}</span>
                 {move !== undefined ? (
                   <span className="sticker shrink-0">{move === 0 ? "New" : move > 0 ? `▲ ${move}` : `▼ ${-move}`}</span>
                 ) : null}
@@ -258,15 +259,14 @@ export function TvMarquee() {
   );
 }
 
+/** "Get judged at jevboard.com — $5", sized for the TV header. */
 export function TvCallToAction({ host }: { host: string }) {
   return (
-    <div className="flex items-center gap-4 border-[3px] border-line bg-card px-4 py-3">
-      <JevFace size={56} className="shrink-0 animate-wiggle" />
-      <div className="min-w-0">
-        <p className="font-display text-[clamp(1.4rem,2vw,2.25rem)] uppercase leading-none">Get judged at</p>
-        <p className="truncate font-display text-[clamp(1.4rem,2vw,2.25rem)] uppercase leading-tight text-jev">{host}</p>
-        <p className="text-sm text-ink-soft">$5. You can't buy #1. You can only buy Jev's attention.</p>
-      </div>
-    </div>
+    <p className="flex items-center gap-3 border-[3px] border-[#111110] bg-jev py-1 pr-3 pl-1.5 font-display text-[clamp(1.1rem,min(1.6vw,2.6vh),1.9rem)] uppercase leading-none text-[#111110]">
+      <JevFace size={36} className="shrink-0 animate-wiggle" />
+      <span>
+        Get judged at <span className="text-hot">{host}</span> · $5
+      </span>
+    </p>
   );
 }

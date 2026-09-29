@@ -45,7 +45,10 @@ export function SharePanel({
           {voice === "defendant" ? (
             <Favicon host={host} size={40} />
           ) : (
-            <span className="grid size-10 shrink-0 place-items-center border-2 border-line bg-paper-2 text-xl" aria-hidden>
+            <span
+              className="grid size-10 shrink-0 place-items-center border-2 border-line bg-paper-2 text-xl"
+              aria-hidden
+            >
               👀
             </span>
           )}
@@ -94,9 +97,11 @@ export function SharePanel({
             type="button"
             className="btn btn-ghost px-4 py-2.5 text-sm"
             onClick={() => {
-              navigator.share({ title: `${facts.siteKey} on Jevboard`, text: message.body, url: facts.url }).catch(() => {
-                // Dismissed by the user.
-              });
+              navigator
+                .share({ title: `${facts.siteKey} on Jevboard`, text: message.body, url: facts.url })
+                .catch(() => {
+                  // Dismissed by the user.
+                });
             }}
           >
             Share…
@@ -125,7 +130,9 @@ function ShareCardStandIn({ facts, serial }: { facts: ShareFacts; serial: string
         </div>
         <div className="flex items-end justify-between gap-[3cqw]">
           <div className="min-w-0 flex-1">
-            <p className="font-display text-[7cqw] uppercase leading-[0.95] [overflow-wrap:anywhere]">{facts.siteKey}</p>
+            <p className="font-display text-[7cqw] uppercase leading-[0.95] [overflow-wrap:anywhere]">
+              {facts.siteKey}
+            </p>
             <p className="mt-[1.5cqw] inline bg-[#111110] px-[1cqw] font-mono text-[2.5cqw] font-bold leading-[1.6] text-jev [box-decoration-break:clone]">
               “{facts.label}”
             </p>

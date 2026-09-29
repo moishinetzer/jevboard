@@ -36,7 +36,7 @@ export function ThroneRoom({
   const kings = new Set(reigns.map((reign) => reign.siteKey)).size;
 
   return (
-    <div className="grid gap-8 lg:grid-cols-12">
+    <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
       <div className="flex flex-col gap-6 lg:col-span-5">
         <KingCard king={king} now={now} />
         <LongestReigns longest={longest} kingSiteKey={king?.siteKey ?? null} now={now} serverNow={serverNow} />

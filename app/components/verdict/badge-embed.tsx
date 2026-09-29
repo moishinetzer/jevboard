@@ -144,7 +144,9 @@ function BadgeStandIn({
     );
   }
   return (
-    <span className={`inline-flex h-8 items-stretch border-2 font-mono text-sm font-bold sm:h-10 sm:text-base ${frame}`}>
+    <span
+      className={`inline-flex h-8 items-stretch border-2 font-mono text-sm font-bold sm:h-10 sm:text-base ${frame}`}
+    >
       <span className="flex items-center gap-1.5 bg-[#111110] px-2 text-[#fbf6e7]">
         <JevFace size={18} />
         {style === "compact" ? null : "JEV SCORE"}

@@ -156,7 +156,8 @@ export default function Entry({ loaderData }: Route.ComponentProps) {
           title="Demand a retrial"
           meta={
             <span>
-              {entry.rolls} roll{entry.rolls === 1 ? "" : "s"} · {formatMoney(entry.rolls * JUDGMENT_PRICE_CENTS)} fed to Jev
+              {entry.rolls} roll{entry.rolls === 1 ? "" : "s"} · {formatMoney(entry.rolls * JUDGMENT_PRICE_CENTS)} fed
+              to Jev
             </span>
           }
         >
@@ -214,7 +215,10 @@ function ChallengeRival({ name }: { name: string }) {
       <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <p className="font-mono text-xs font-bold tracking-widest uppercase">Challenge a rival</p>
-          <h2 id="challenge-title" className="mt-2 font-display text-5xl leading-[0.92] uppercase [overflow-wrap:anywhere] sm:text-7xl">
+          <h2
+            id="challenge-title"
+            className="mt-2 font-display text-5xl leading-[0.92] uppercase [overflow-wrap:anywhere] sm:text-7xl"
+          >
             Think you're more useful than {name}?
           </h2>
           <p className="mt-3 text-lg font-bold">Same judge. Same $5. No mercy, no refunds on your ego.</p>

@@ -58,13 +58,14 @@ export default function Tv({ loaderData }: Route.ComponentProps) {
               Jev<span className="-ml-3 text-hot">board</span> TV
             </h1>
             <div className="flex flex-wrap items-center gap-4">
+              <TvCallToAction host={loaderData.host} />
               <UpdatedAgo at={lastUpdated} />
               <TvClock serverNow={loaderData.now} />
               <FullscreenButton target={screen} />
             </div>
           </header>
 
-          <div className="grid flex-1 gap-6 xl:grid-cols-[minmax(0,1.75fr)_minmax(22rem,1fr)]">
+          <div className="grid flex-1 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.75fr)_minmax(22rem,1fr)]">
             <section aria-labelledby="tv-board-title" className="min-w-0">
               <h2 id="tv-board-title" className="mb-3 font-mono text-xs font-bold uppercase tracking-widest text-ink-soft">
                 The board · top 10 · all-time
@@ -75,7 +76,6 @@ export default function Tv({ loaderData }: Route.ComponentProps) {
               <KingPanel serverNow={loaderData.now} />
               <TvCounters />
               <TvFeed serverNow={loaderData.now} />
-              <TvCallToAction host={loaderData.host} />
             </div>
           </div>
         </div>

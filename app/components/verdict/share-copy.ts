@@ -50,7 +50,8 @@ const defendantBody = (f: ShareFacts): string => {
 
 const spectatorBody = (f: ShareFacts): string => {
   if (f.rank === 1) return `${f.siteKey} is #1 on Jevboard with ${f.score}/1000. Jev calls it '${f.label}'.`;
-  if (isHighScore(f.score)) return `Jev rated ${f.siteKey} ${f.score}/1000 (#${f.rank} of ${f.total}): '${f.label}'. Agree?`;
+  if (isHighScore(f.score))
+    return `Jev rated ${f.siteKey} ${f.score}/1000 (#${f.rank} of ${f.total}): '${f.label}'. Agree?`;
   return `Jev just called ${f.siteKey} '${f.label}'. ${f.score}/1000. Brutal.`;
 };
 

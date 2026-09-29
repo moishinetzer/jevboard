@@ -44,7 +44,13 @@ export function CountUp({ value, className }: { value: number; className?: strin
 const CONFETTI_COLORS = ["var(--jev)", "var(--hot)", "#7cf0c5", "#9ec5ff", "#d6c8ff", "#fffdf6", "#ff9f1c"];
 
 /** A deterministic burst of paper confetti, fired when the count lands. */
-export function Confetti({ pieces = 64, origin = { x: "50%", y: "40%" } }: { pieces?: number; origin?: { x: string; y: string } }) {
+export function Confetti({
+  pieces = 64,
+  origin = { x: "50%", y: "40%" },
+}: {
+  pieces?: number;
+  origin?: { x: string; y: string };
+}) {
   return (
     <div aria-hidden className="jev-confetti" style={{ "--ox": origin.x, "--oy": origin.y } as CSSProperties}>
       {Array.from({ length: pieces }, (_, index) => {
@@ -82,7 +88,10 @@ function Declined({ order, result }: { order: OrderView; result: Result }) {
         <JevFace size={84} className="shrink-0" />
         <div className="min-w-0">
           <span className="sticker text-sm">Case dismissed · Judgment {serialLabel(result.judgment.serial)}</span>
-          <h2 id="declined-title" className="mt-3 font-display text-4xl leading-none uppercase [overflow-wrap:anywhere] sm:text-6xl">
+          <h2
+            id="declined-title"
+            className="mt-3 font-display text-4xl leading-none uppercase [overflow-wrap:anywhere] sm:text-6xl"
+          >
             Jev declined to list {order.siteKey}.
           </h2>
           <p className="mt-4 max-w-xl text-lg">{FLAG_COPY[flag]}</p>
@@ -150,8 +159,11 @@ export function VerdictReveal({ order, result, origin }: { order: OrderView; res
           <div className="min-w-0">
             <div className="flex items-center gap-3">
               <Favicon host={entry.host} size={36} />
-              <h2 id="reveal-title" className="font-display text-4xl leading-none uppercase [overflow-wrap:anywhere] sm:text-5xl">
-                {entry.siteKey}
+              <h2
+                id="reveal-title"
+                className="font-display text-4xl leading-none uppercase [overflow-wrap:anywhere] sm:text-5xl"
+              >
+                {judgment.name}
               </h2>
             </div>
             <p className="jev-rise mt-4 text-xl leading-tight font-bold sm:text-2xl" style={delay(LANDED - 400)}>
@@ -161,8 +173,10 @@ export function VerdictReveal({ order, result, origin }: { order: OrderView; res
                     {judgment.previousScore} → {judgment.score}
                   </span>
                   ,{" "}
-                  <span className={`tabular ${delta > 0 ? "text-up" : delta < 0 ? "text-down" : ""}`}>{formatDelta(delta)}</span>,
-                  now <span className="highlight">#{entry.rank}</span> of {formatCount(totalEntries)}
+                  <span className={`tabular ${delta > 0 ? "text-up" : delta < 0 ? "text-down" : ""}`}>
+                    {formatDelta(delta)}
+                  </span>
+                  , now <span className="highlight">#{entry.rank}</span> of {formatCount(totalEntries)}
                 </>
               ) : (
                 <>
@@ -183,7 +197,10 @@ export function VerdictReveal({ order, result, origin }: { order: OrderView; res
                 Jev is impressed. Jev is never impressed.
               </p>
             ) : (
-              <div className="jev-stamp mt-6 inline-block border-4 border-double border-line px-4 py-2" style={delay(LANDED)}>
+              <div
+                className="jev-stamp mt-6 inline-block border-4 border-double border-line px-4 py-2"
+                style={delay(LANDED)}
+              >
                 <p className="font-display text-3xl leading-none uppercase sm:text-4xl">Jev has spoken.</p>
                 <p className="mt-1 font-mono text-[11px] font-bold tracking-widest uppercase">
                   You may appeal. Jev may not care.

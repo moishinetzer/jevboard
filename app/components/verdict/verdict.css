@@ -90,7 +90,8 @@
   }
   100% {
     opacity: 0;
-    transform: translate(calc(-50% + var(--x) * 1.25), calc(-50% + var(--y) + 180px)) rotate(calc(var(--r) * 2)) scale(0.9);
+    transform: translate(calc(-50% + var(--x) * 1.25), calc(-50% + var(--y) + 180px)) rotate(calc(var(--r) * 2))
+      scale(0.9);
   }
 }
 

@@ -46,8 +46,14 @@ export function ScoreRuler({ score }: { score: number }) {
   const position = Math.max(0, Math.min(100, (score / 1000) * 100));
   return (
     <div aria-hidden>
-      <div className="relative h-4 border-2 border-[#111110]" style={{ background: `linear-gradient(90deg, ${gradient})` }}>
-        <span className="absolute -top-2.5 bottom-[-10px] w-[4px] -translate-x-1/2 bg-[#111110]" style={{ left: `${position}%` }} />
+      <div
+        className="relative h-4 border-2 border-[#111110]"
+        style={{ background: `linear-gradient(90deg, ${gradient})` }}
+      >
+        <span
+          className="absolute -top-2.5 bottom-[-10px] w-[4px] -translate-x-1/2 bg-[#111110]"
+          style={{ left: `${position}%` }}
+        />
       </div>
       <div className="mt-1.5 flex justify-between font-mono text-[10px] font-bold">
         <span>1 · useless</span>

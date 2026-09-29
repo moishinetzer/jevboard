@@ -24,10 +24,15 @@ export function DuelCard({ duel, perspectiveId, now }: { duel: Duel; perspective
   const { us, them } = sides(duel, perspectiveId);
   const won = duel.winnerId === us.id;
   return (
-    <article className="slab-sm flex w-full flex-col overflow-hidden" aria-label={`Duel against ${them.siteKey}: ${won ? "won" : "lost"}`}>
+    <article
+      className="slab-sm flex w-full flex-col overflow-hidden"
+      aria-label={`Duel against ${them.siteKey}: ${won ? "won" : "lost"}`}
+    >
       <header className="flex items-center justify-between gap-2 border-b-2 border-line bg-[#111110] px-3 py-1.5 font-mono text-[11px] font-bold tracking-widest text-[#fbf6e7] uppercase">
         <span>⚔️ Tied at {duel.score}</span>
-        <span className={`border-2 border-[#111110] px-1.5 text-[#111110] ${won ? "bg-up" : "bg-hot"}`}>{won ? "Won" : "Lost"}</span>
+        <span className={`border-2 border-[#111110] px-1.5 text-[#111110] ${won ? "bg-up" : "bg-hot"}`}>
+          {won ? "Won" : "Lost"}
+        </span>
       </header>
       <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 px-3 py-4 sm:px-4">
         <Fighter siteKey={us.siteKey} winner={won} />
@@ -52,7 +57,9 @@ export function DuelCard({ duel, perspectiveId, now }: { duel: Duel; perspective
 function Fighter({ siteKey, winner, link = false }: { siteKey: string; winner: boolean; link?: boolean }) {
   const host = siteKey.split("/")[0] ?? siteKey;
   const name = (
-    <span className={`text-sm font-bold [overflow-wrap:anywhere] ${winner ? "" : "line-through decoration-hot decoration-2"}`}>
+    <span
+      className={`text-sm font-bold [overflow-wrap:anywhere] ${winner ? "" : "line-through decoration-hot decoration-2"}`}
+    >
       {siteKey}
     </span>
   );

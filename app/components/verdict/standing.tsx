@@ -39,11 +39,15 @@ export function Neighbours({ entry, neighbours }: { entry: BoardEntry; neighbour
                   {neighbour.siteKey}
                 </Link>
               )}
-              <span className={`block truncate font-mono text-[11px] ${self ? "" : "text-ink-soft"}`}>{neighbour.label}</span>
+              <span className={`block truncate font-mono text-[11px] ${self ? "" : "text-ink-soft"}`}>
+                {neighbour.label}
+              </span>
             </div>
             <div className="shrink-0 text-right">
               <span className="score-num text-3xl">{neighbour.score}</span>
-              <span className={`block text-[10px] font-bold tracking-wide uppercase ${self ? "" : "text-ink-soft"}`}>{note}</span>
+              <span className={`block text-[10px] font-bold tracking-wide uppercase ${self ? "" : "text-ink-soft"}`}>
+                {note}
+              </span>
             </div>
           </li>
         );

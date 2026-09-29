@@ -44,7 +44,6 @@ export default function Stats({ loaderData }: Route.ComponentProps) {
   const visitors = Math.max(counters.visitors, stats.visitors);
   const launchedAt = counters.launchedAt ?? stats.launchedAt;
   const windowRevenue = daily.reduce((sum, day) => sum + day.revenueCents, 0);
-  const perJudgment = judgments > 0 ? revenueCents / judgments : JUDGMENT_PRICE_CENTS;
 
   return (
     <main>
@@ -79,9 +78,8 @@ export default function Stats({ loaderData }: Route.ComponentProps) {
             </h2>
             <p className="mt-4 max-w-xl text-lg text-ink-soft">
               Across <strong className="text-ink">{formatCount(judgments)}</strong> judgments of{" "}
-              <strong className="text-ink">{formatCount(entries)}</strong> defendants. That's{" "}
-              {formatMoney(Math.round(perJudgment))} per verdict, because every verdict costs exactly{" "}
-              {formatMoney(JUDGMENT_PRICE_CENTS)}. Nobody can pay more. Many have tried to pay again.
+              <strong className="text-ink">{formatCount(entries)}</strong> defendants. Every verdict costs exactly{" "}
+              {formatMoney(JUDGMENT_PRICE_CENTS)}. Nobody can pay more. Many have paid again.
             </p>
           </div>
           <div className="flex flex-col items-start gap-3 lg:items-end">
@@ -128,7 +126,7 @@ export default function Stats({ loaderData }: Route.ComponentProps) {
           <DailyCharts days={daily} revenueBeforeCents={Math.max(0, stats.revenueCents - windowRevenue)} />
         </section>
 
-        <div className="grid gap-10 lg:grid-cols-2 lg:items-start">
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-2 lg:items-start">
           <section aria-labelledby="scores-title" className="slab p-4 sm:p-6">
             <h2 id="scores-title" className="font-display text-4xl uppercase leading-none">
               Score distribution

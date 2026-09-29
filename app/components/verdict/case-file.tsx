@@ -73,8 +73,13 @@ export function CaseFile({ judgment, siteKey }: { judgment: Judgment; siteKey: s
                 <span className="absolute -top-3.5 left-3 border-2 border-[#111110] bg-jev px-2 py-0.5 font-mono text-[11px] font-bold tracking-widest text-[#111110] uppercase">
                   Exhibit {EXHIBIT_LETTERS[index] ?? index + 1}
                 </span>
-                <span aria-hidden className="absolute -top-2.5 right-5 h-5 w-16 rotate-[4deg] border border-line/30 bg-jev/50" />
-                <blockquote className="font-mono text-sm leading-relaxed [overflow-wrap:anywhere]">“{receipt}”</blockquote>
+                <span
+                  aria-hidden
+                  className="absolute -top-2.5 right-5 h-5 w-16 rotate-[4deg] border border-line/30 bg-jev/50"
+                />
+                <blockquote className="font-mono text-sm leading-relaxed [overflow-wrap:anywhere]">
+                  “{receipt}”
+                </blockquote>
                 <p className="mt-3 border-t-2 border-dashed border-line/40 pt-2 text-[11px] font-bold tracking-wide text-ink-soft uppercase">
                   Recovered from {siteKey}
                 </p>
@@ -133,7 +138,10 @@ function PointsList({
         <ul className="mt-3 grid gap-2.5">
           {items.map((item) => (
             <li key={item} className="flex items-start gap-3 text-base font-medium">
-              <span aria-hidden className={`grid size-6 shrink-0 place-items-center border-2 border-[#111110] text-sm font-bold ${markClass}`}>
+              <span
+                aria-hidden
+                className={`grid size-6 shrink-0 place-items-center border-2 border-[#111110] text-sm font-bold ${markClass}`}
+              >
                 {mark}
               </span>
               <span className="pt-px">{item}</span>

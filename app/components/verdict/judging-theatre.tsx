@@ -210,8 +210,10 @@ export function Theatre({
             <span className="size-2.5 animate-blink rounded-full bg-hot" aria-hidden />
             Live from the bench
           </span>
-          <span className="tabular" aria-label="Time elapsed">
-            ⏱ {clock(ticking - startedAt)}
+          <span className="tabular">
+            <span aria-hidden>⏱ </span>
+            {clock(ticking - startedAt)}
+            <span className="sr-only"> elapsed</span>
           </span>
         </div>
 
@@ -223,7 +225,10 @@ export function Theatre({
           className="mt-8 border-y-2 border-dashed border-[#fbf6e7]/30 py-4 font-mono text-base font-bold text-jev sm:text-xl [overflow-wrap:anywhere]"
         >
           {order.stageDetail ?? "Jev is on it…"}
-          <span aria-hidden className="ml-1 inline-block h-[1em] w-[0.55em] translate-y-[0.15em] animate-blink bg-jev" />
+          <span
+            aria-hidden
+            className="ml-1 inline-block h-[1em] w-[0.55em] translate-y-[0.15em] animate-blink bg-jev"
+          />
         </p>
         <div className="mt-4">
           <Quips key={order.status} status={order.status} />
@@ -231,8 +236,8 @@ export function Theatre({
 
         {order.kind === "reroll" && current ? (
           <p className="mt-6 text-base">
-            Currently <span className="score-num text-2xl text-jev">{current.score}</span>/1000 · #{current.rank}. It can go
-            up. <span className="font-bold">It can also go down.</span>
+            Currently <span className="score-num text-2xl text-jev">{current.score}</span>/1000 · #{current.rank}. It
+            can go up. <span className="font-bold">It can also go down.</span>
           </p>
         ) : null}
         <p className="mt-4 text-sm text-[#fbf6e7]/65">
@@ -275,9 +280,9 @@ function DuelPitStage({ pit }: { pit: DuelInProgress }) {
       </p>
       {pit.duel ? (
         <div className="mt-8">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 sm:gap-6">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-3 sm:gap-6">
             <Contender key={`a-${pit.duel.n}`} siteKey={pit.duel.a} side="left" />
-            <span className="grid size-14 -rotate-6 animate-pulse place-items-center rounded-full border-[3px] border-[#fbf6e7] bg-hot font-display text-2xl text-white sm:size-20 sm:text-4xl">
+            <span className="grid size-14 -rotate-6 animate-pulse place-items-center self-center rounded-full border-[3px] border-[#fbf6e7] bg-hot font-display text-2xl text-white sm:size-20 sm:text-4xl">
               VS
             </span>
             <Contender key={`b-${pit.duel.n}`} siteKey={pit.duel.b} side="right" />
@@ -294,12 +299,12 @@ function DuelPitStage({ pit }: { pit: DuelInProgress }) {
 function Contender({ siteKey, side }: { siteKey: string; side: "left" | "right" }) {
   return (
     <div
-      className={`flex min-w-0 flex-col items-center gap-2 border-[3px] border-[#fbf6e7] bg-[#1b1a15] px-2 py-4 ${
+      className={`flex min-w-0 flex-col items-center justify-center gap-2 border-[3px] border-[#fbf6e7] bg-[#1b1a15] px-2 py-4 ${
         side === "left" ? "jev-from-left" : "jev-from-right"
       }`}
     >
       <Favicon host={siteKey.split("/")[0] ?? siteKey} size={44} />
-      <span className="text-sm font-bold [overflow-wrap:anywhere] sm:text-base">{siteKey}</span>
+      <span className="text-xs font-bold [overflow-wrap:anywhere] sm:text-base">{siteKey}</span>
     </div>
   );
 }
@@ -385,8 +390,8 @@ export function Mistrial({ order }: { order: OrderView }) {
             </p>
           ) : null}
           <p className="mt-6 text-sm text-ink-soft">
-            Make sure <span className="font-mono font-bold [overflow-wrap:anywhere]">{order.url}</span> loads in a normal
-            browser.{" "}
+            Make sure <span className="font-mono font-bold [overflow-wrap:anywhere]">{order.url}</span> loads in a
+            normal browser.{" "}
             <Link to="/" className="font-bold underline">
               Back to the board
             </Link>

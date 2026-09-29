@@ -4,13 +4,7 @@ import { loadJudging, retryOrder } from "~/.server/flows/judging";
 import { CurrentRequest, effectAction, effectLoader } from "~/.server/http";
 import { Board } from "~/.server/services/Board";
 import { JevFace } from "~/components/logo";
-import {
-  AwaitingPayment,
-  Mistrial,
-  ProgressRail,
-  Theatre,
-  usePolling,
-} from "~/components/verdict/judging-theatre";
+import { AwaitingPayment, Mistrial, ProgressRail, Theatre, usePolling } from "~/components/verdict/judging-theatre";
 import { VerdictReveal } from "~/components/verdict/score-reveal";
 import { entryPath } from "~/lib/site-key";
 import type { loader as rootLoader } from "~/root";
@@ -56,7 +50,9 @@ export default function Judging({ loaderData }: Route.ComponentProps) {
     <main className="mx-auto max-w-4xl px-4 py-8 sm:py-12">
       <header className="mb-8 sm:mb-10">
         <p className="font-mono text-xs font-bold tracking-widest uppercase">
-          <span className="bg-ink px-1.5 py-0.5 text-paper">{order.kind === "reroll" ? "Retrial" : "First judgment"}</span>
+          <span className="bg-ink px-1.5 py-0.5 text-paper">
+            {order.kind === "reroll" ? "Retrial" : "First judgment"}
+          </span>
           <span className="ml-2 text-ink-soft">Case: Jev v.</span>
         </p>
         <h1 className="mt-2 font-display text-5xl leading-[0.9] uppercase [overflow-wrap:anywhere] sm:text-7xl">
@@ -65,6 +61,9 @@ export default function Judging({ loaderData }: Route.ComponentProps) {
       </header>
 
       <ProgressRail steps={steps} />
+      <p role="status" className="sr-only">
+        {announcement(loaderData)}
+      </p>
 
       <div className="mt-10">
         {order.status === "pending_payment" ? (
@@ -84,6 +83,14 @@ export default function Judging({ loaderData }: Route.ComponentProps) {
     </main>
   );
 }
+
+/** One line for screen readers when the case closes (the theatre narrates the steps before that). */
+const announcement = ({ order, result }: Route.ComponentProps["loaderData"]): string => {
+  if (order.status === "failed") return `Mistrial: ${order.error ?? "Jev couldn't finish."}`;
+  if (order.status !== "complete" || !result) return "";
+  if (!result.entry) return "Case dismissed: Jev declined to list this site.";
+  return `Jev has spoken: ${result.judgment.score} out of 1000, rank ${result.entry.rank} of ${result.totalEntries}.`;
+};
 
 /** Complete, but the judgment row couldn't be loaded (shouldn't happen): point at the verdict page. */
 function VerdictMissing({ siteKey }: { siteKey: string }) {
