@@ -32,7 +32,8 @@ Jevboard borrows the mechanics that made pay-for-attention sites go viral
 ```
 submit URL ─▶ validate + reachability preflight ─▶ order (pending_payment)
    ─▶ Autumn checkout (Stripe) ─▶ /judging/:orderId confirms the payment (idempotent credit consumption)
-   ─▶ worker queue: crawl ─▶ Jev judges (Claude + web_fetch) ─▶ tiebreak duels ─▶ atomic placement
+   ─▶ Queue "jevboard-judgments":  crawl ─▶ Jev judges (Claude + web_fetch)      [parallel]
+   ─▶ Queue "jevboard-placements": tiebreak duels ─▶ atomic D1 batch placement  [one at a time]
    ─▶ events on The Tape, reigns, verdict page, OG card, badge
 ```
 
@@ -45,78 +46,115 @@ submit URL ─▶ validate + reachability preflight ─▶ order (pending_paymen
   illegal, hateful and parked sites are judged but kept off the board.
 - **Tiebreakers.** Entries at the same score are ordered by Jev. A newcomer is placed with a binary search in
   which every probe is a duel, so joining a group of `n` tied rivals takes at most `⌈log2(n+1)⌉` duels.
-  Sides are shuffled to avoid position bias, every duel is recorded, and placements run under a global lock so
-  concurrent judgments never interleave.
+  Sides are shuffled to avoid position bias and every duel is recorded. Placements run on a queue with
+  `max_concurrency: 1`, so concurrent verdicts never interleave inside a tie group, and each placement is
+  committed as a single atomic D1 batch.
 - **Durability.** The order row is the state machine (`pending_payment → paid → crawling → judging →
-  tiebreaking → complete | failed`). Workers re-enqueue in-flight orders on boot, a sweeper confirms payments
-  for buyers who closed the tab, and a failed paid judgment can be retried for free.
+  tiebreaking → complete | failed`) and Jev's verdict is parked on it between the two queue stages, so both
+  stages are idempotent under at-least-once delivery. A cron trigger (every minute) confirms payments for
+  buyers who closed the tab and re-queues stalled judgments; a failed paid judgment can be retried for free.
 
 ## Architecture
 
-React Router 8 (framework mode) renders everything; **all server logic is Effect 4** and runs on one
-`ManagedRuntime` shared by loaders, actions and background workers.
+Everything runs on **Cloudflare Workers**. React Router 8 (framework mode, via `@cloudflare/vite-plugin`)
+renders the pages; **all server logic is Effect 4**, running on one `ManagedRuntime` per isolate that is
+shared by loaders, actions, queue consumers and the cron trigger (`workers/app.ts` exports `fetch`,
+`queue` and `scheduled`).
 
 ```
-AppConfig ─┬─ Database (SQLite, migrations) ── Board, Orders ─┐
-           ├─ Crawler (SSRF-safe undici) ─────────────────────┼─ Pipeline ── JudgmentQueue (workers, recovery, sweeper)
-           ├─ Judge (Claude | deterministic mock) ────────────┘
-           ├─ Payments (Autumn | local simulator)
-           └─ Presence (who's watching)
+Worker env ─┬─ D1 (@effect/sql-d1, atomic batches) ── Board, Orders, Presence ─┐
+            ├─ Crawler (fetch + DNS-over-HTTPS SSRF guard) ────────────────────┼─ Pipeline (judge │ place)
+            ├─ Judge (Claude | deterministic mock) ────────────────────────────┘
+            ├─ Payments (Autumn | checkout simulator)
+            ├─ JudgmentQueue (Cloudflare Queues) · RateLimiter (Rate Limiting bindings)
+            └─ AppConfig (vars + secrets)
 ```
+
+| Cloudflare product | Used for |
+| --- | --- |
+| Workers + static assets | SSR, loaders/actions, resource routes (OG cards, badges, feed) |
+| D1 | Entries, orders, judgments, duels, events, reigns, visitors, presence |
+| Queues | `jevboard-judgments` (crawl + verdict, parallel) → `jevboard-placements` (duels + ranking, serialized) |
+| Cron Triggers | Payment sweeper, stalled-job recovery, presence pruning |
+| Rate Limiting | Per-visitor and per-IP submission limits |
 
 - `app/.server/domain/` — Schema-first domain: branded ids, the `Verdict` schema that doubles as Claude's
   structured-output contract, tagged errors.
-- `app/.server/services/` — one `Context.Service` per file with a `layer`; implementations for external
-  providers live beside their contracts (`crawler/`, `judge/`, `payments/`) with test/dev variants.
+- `app/.server/services/` — one `Context.Service` per file with a `layer`; provider implementations live
+  beside their contracts (`crawler/`, `judge/`, `payments/`) with dev/test variants.
+- `app/.server/cloudflare/` — the only Workers-specific code: bindings, D1/Queues/Rate-Limiting layers and
+  the queue consumer. `app/.server/runtime.ts` composes the layer graph.
 - `app/.server/http.ts` — the React Router ↔ Effect bridge. `effectLoader(name, args => Effect)` runs the
   effect on the runtime with a per-request `CurrentRequest` service, passes `redirect()` responses through,
   maps typed errors to HTTP statuses for the route `ErrorBoundary`, logs defects, and interrupts on client
   disconnect.
-- `app/.server/flows/` — use cases called by routes (submit, judging page, shell/feed).
+- `app/.server/flows/` — use cases called by routes, the queue consumer and the cron trigger.
 - `app/routes/` — thin route modules; `app/components/` — UI.
+- `migrations/` — D1 schema, applied by wrangler in every environment and loaded verbatim by the Node test
+  harness, so tests run the same SQL against SQLite.
 
-The patterns follow Effect's own guidance (`Context.Service` classes, `layer` naming, `Effect.fn` spans,
-`Schema.TaggedError`, services with `R = never`) and real Effect + React Router codebases such as
-effect-rr, vite-remix-effect and t3code.
+Because infrastructure sits behind services, the same repositories, pipeline and flows run in Node tests
+(SQLite + in-process queue) and on Workers (D1 + Queues) unchanged. The patterns follow Effect's own guidance
+(`Context.Service` classes, `layer` naming, `Effect.fn` spans, `Schema.TaggedError`, services with
+`R = never`) and real Effect + React Router codebases such as effect-rr, vite-remix-effect and t3code.
 
 ## Running locally
 
-Requires Node ≥ 22.22 and pnpm.
+Requires Node ≥ 22.22 and pnpm. `pnpm dev` runs the real Worker in workerd (via the Cloudflare Vite plugin)
+with local D1, Queues and cron.
 
 ```sh
 pnpm install
-cp .env.example .env        # optional — everything works without keys in dev
-pnpm seed                   # optional: a demo board with mock verdicts
-pnpm dev                    # http://localhost:5173
+cp .dev.vars.example .dev.vars   # optional — everything works without keys locally
+pnpm db:migrate                  # apply migrations to the local D1
+pnpm seed                        # optional: a demo board with mock verdicts
+pnpm dev                         # http://localhost:5173
 ```
 
 Without `ANTHROPIC_API_KEY`, Jev is a deterministic mock (scores snap to a coarse grid so you can watch
-duels happen). Without `AUTUMN_SECRET_KEY`, checkout is simulated at `/dev/checkout/:orderId`. A banner says so.
-In production both keys are required unless explicitly overridden.
+duels happen). Without `AUTUMN_SECRET_KEY`, checkout is simulated at `/dev/checkout/:orderId`. A banner says
+so. Deployed builds refuse to start without both keys unless explicitly overridden. Trigger the cron locally
+with `curl -X POST "localhost:5173/cdn-cgi/local/explorer/api/local/scheduled?worker=jevboard" -d '{"cron":"* * * * *"}'`.
 
 ```sh
-pnpm test        # vitest + @effect/vitest
+pnpm test        # vitest + @effect/vitest (Node, SQLite with the D1 migrations)
 pnpm typecheck   # react-router typegen && tsc
-pnpm build && pnpm start
 ```
 
 ## Configuration
 
-See [`.env.example`](.env.example). The important ones: `ANTHROPIC_API_KEY`, `AUTUMN_SECRET_KEY`,
-`AUTUMN_WEBHOOK_SECRET`, `PUBLIC_URL`, `DATABASE_PATH`, `JEV_MODEL` (default `claude-opus-5-5`),
-`JEV_JUDGE_EFFORT`, `JEV_DUEL_EFFORT`, `JEV_WORKERS`.
+Non-secret settings live in `vars` in [`wrangler.jsonc`](wrangler.jsonc); secrets are set with
+`wrangler secret put` (locally: `.dev.vars`).
+
+| Name | Kind | Notes |
+| --- | --- | --- |
+| `ANTHROPIC_API_KEY` | secret | Jev's brain. Required in production. |
+| `AUTUMN_SECRET_KEY` | secret | `am_sk_test_…` / `am_sk_live_…`. Required in production. |
+| `AUTUMN_WEBHOOK_SECRET` | secret | Optional Svix secret; the cron sweeper covers closed tabs without it. |
+| `PUBLIC_URL` | var | Canonical origin for checkout return URLs and share links. |
+| `JEV_MODEL`, `JEV_JUDGE_EFFORT`, `JEV_DUEL_EFFORT` | var | Default `claude-opus-5-5`, `medium`, `low`. |
+| `AUTUMN_PLAN_ID`, `AUTUMN_FEATURE_ID`, `AUTUMN_API_VERSION` | var | Default `judgment`, `judgment`, `2.4.0`. |
+| `JEV_ALLOW_FAKE_PAYMENTS`, `JEV_ALLOW_MOCK_JUDGE` | var | Escape hatches for staging without real providers. |
+
+## Deploying
+
+```sh
+wrangler d1 create jevboard                 # paste the id into wrangler.jsonc
+wrangler queues create jevboard-judgments
+wrangler queues create jevboard-placements
+wrangler secret put ANTHROPIC_API_KEY
+wrangler secret put AUTUMN_SECRET_KEY
+wrangler secret put AUTUMN_WEBHOOK_SECRET   # optional
+pnpm db:migrate:remote
+pnpm deploy                                 # react-router build && wrangler deploy
+```
+
+Then point the Autumn webhook at `https://<your-domain>/api/autumn/webhook` ([docs/payments.md](docs/payments.md)).
 
 ## Payments
 
 Each $5 buys one judgment credit through Autumn (a one-off plan granting one unit of the `judgment` feature).
 Setup, webhook and test cards: [docs/payments.md](docs/payments.md).
-
-## Deploying
-
-The app is a single Node process with SQLite, so deploy it on anything with a persistent volume (Fly.io,
-Railway, Render, a VM). The included `Dockerfile` builds the app, stores the database at
-`/data/jevboard.db` and exposes `/healthz`. Run one instance: the worker queue and placement lock are
-in-process.
 
 ## Routes
 
