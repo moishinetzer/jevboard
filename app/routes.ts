@@ -17,6 +17,8 @@ export default [
   // Resource routes
   route("go/*", "routes/go.ts"),
   route("api/feed", "routes/api.feed.ts"),
+  // Autumn (Svix-signed) payment webhook
+  route("api/autumn/webhook", "routes/api.autumn-webhook.ts"),
   route("og.png", "routes/og-default.ts"),
   route("og/*", "routes/og.ts"),
   route("badge/*", "routes/badge.ts"),
