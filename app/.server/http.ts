@@ -1,6 +1,7 @@
-import { Cause, Context, Effect, Exit, Option } from "effect";
-import { data, type RouterContextProvider } from "react-router";
+import { Context, Effect, Option } from "effect";
+import type { RouterContextProvider } from "react-router";
 import { AppConfig } from "./config";
+import { toRouteOutcome } from "./route-errors";
 import { type AppServices, runtime } from "./runtime";
 import { Board } from "./services/Board";
 import { Presence } from "./services/Presence";
@@ -45,22 +46,6 @@ interface RouteArgs {
   readonly context: Readonly<RouterContextProvider>;
 }
 
-/** Error tag → HTTP status. Anything else is a 500. */
-const STATUS_BY_TAG: Record<string, number> = {
-  InvalidSite: 400,
-  SchemaError: 400,
-  NotFound: 404,
-  CrawlError: 422,
-  PaymentError: 502,
-  RateLimited: 429,
-  JudgeError: 502,
-};
-
-export interface RouteErrorData {
-  readonly error: string;
-  readonly message: string;
-}
-
 const originFor = (request: Request, publicUrl: Option.Option<string>): string => {
   if (Option.isSome(publicUrl)) return publicUrl.value;
   const url = new URL(request.url);
@@ -101,25 +86,12 @@ const run = async <A, E>(name: string, effect: Effect.Effect<A, E, RouteServices
     ),
     { signal: args.request.signal },
   );
-  if (Exit.isSuccess(exit)) return exit.value;
-
-  const cause = exit.cause;
-  const squashed = Cause.squash(cause);
-  if (squashed instanceof Response) throw squashed;
-  if (Cause.hasInterruptsOnly(cause)) {
-    throw data<RouteErrorData>({ error: "Aborted", message: "Request aborted" }, { status: 499 });
+  const outcome = toRouteOutcome(exit);
+  if (outcome._tag === "Return") return outcome.value;
+  if (outcome.defect) {
+    await runtime.runPromise(Effect.logError(`Unhandled failure in ${name}`, outcome.defect)).catch(() => undefined);
   }
-  const failure = Cause.findErrorOption(cause);
-  if (Option.isSome(failure)) {
-    const error = failure.value as { readonly _tag?: string; readonly message?: string };
-    const tag = error._tag ?? "Error";
-    throw data<RouteErrorData>(
-      { error: tag, message: error.message || "Something went wrong." },
-      { status: STATUS_BY_TAG[tag] ?? 500 },
-    );
-  }
-  await runtime.runPromise(Effect.logError(`Unhandled defect in ${name}`, cause)).catch(() => undefined);
-  throw data<RouteErrorData>({ error: "InternalError", message: "Jev tripped over a cable. Try again." }, { status: 500 });
+  throw outcome.thrown;
 };
 
 /** Wraps an Effect-returning function as a React Router `loader`. */
