@@ -75,11 +75,16 @@ export default function DevCheckout({ loaderData }: Route.ComponentProps) {
           marks the order as paid.
         </p>
         {order.status === "pending_payment" ? (
-          <Form method="post" className="mt-6">
-            <button type="submit" className="btn w-full px-6 py-4 text-lg" disabled={navigation.state !== "idle"}>
-              {navigation.state !== "idle" ? "Paying…" : `Pay ${formatMoney(order.amountCents)} (pretend)`}
-            </button>
-          </Form>
+          <>
+            <Form method="post" className="mt-6">
+              <button type="submit" className="btn w-full px-6 py-4 text-lg" disabled={navigation.state !== "idle"}>
+                {navigation.state !== "idle" ? "Paying…" : `Pay ${formatMoney(order.amountCents)} (pretend)`}
+              </button>
+            </Form>
+            <a href={`/?cancelled=${order.id}`} className="mt-4 block text-center text-sm font-bold underline">
+              Cancel and go back
+            </a>
+          </>
         ) : (
           <a href={loaderData.returnTo} className="btn mt-6 w-full px-6 py-4 text-lg">
             Already paid — see the verdict

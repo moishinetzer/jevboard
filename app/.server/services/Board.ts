@@ -775,7 +775,10 @@ export class Board extends Context.Service<
         const histogram = Array.from({ length: 10 }, (_, index) => buckets.find((b) => b.bucket === index)?.count ?? 0);
         const [king] = yield* sql<{ siteKey: string; name: string; score: number; since: number | null }>`
           SELECT e.site_key, e.name, e.score,
-                 (SELECT r.started_at FROM reigns r WHERE r.entry_id = e.id AND r.ended_at IS NULL ORDER BY r.started_at DESC LIMIT 1) AS since
+                 COALESCE(
+                   (SELECT r.started_at FROM reigns r WHERE r.entry_id = e.id AND r.ended_at IS NULL ORDER BY r.started_at DESC LIMIT 1),
+                   e.last_judged_at
+                 ) AS since
           FROM entries e WHERE e.hidden = 0 ORDER BY e.score DESC, e.tie_rank ASC, e.first_judged_at ASC LIMIT 1`;
         const [live] = yield* sql<{ judgingNow: number }>`
           SELECT COUNT(*) AS judging_now FROM orders WHERE status IN ${sql.in(IN_FLIGHT_STATUSES)}`;

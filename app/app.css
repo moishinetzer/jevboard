@@ -6,7 +6,17 @@
 @import "@fontsource/jetbrains-mono/700.css";
 @import "tailwindcss";
 
-@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+/* Dark mode follows the OS unless the toggle forces a theme. */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]), :root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+}
 
 /*
  * Jevboard design tokens.
@@ -27,6 +37,8 @@
   --card: #fffdf6;
   --line: #111110;
   --shadow: #111110;
+  /* Hard shadow under yellow buttons. */
+  --btn-shadow: #111110;
   color-scheme: light;
 }
 
@@ -38,7 +50,8 @@
     --ink-soft: #b9b2a0;
     --card: #1a1914;
     --line: #f6f1e1;
-    --shadow: #000000;
+    --shadow: #ffd400;
+    --btn-shadow: #f6f1e1;
     color-scheme: dark;
   }
 }
@@ -50,7 +63,8 @@
   --ink-soft: #b9b2a0;
   --card: #1a1914;
   --line: #f6f1e1;
-  --shadow: #000000;
+  --shadow: #ffd400;
+  --btn-shadow: #f6f1e1;
   color-scheme: dark;
 }
 
@@ -124,6 +138,11 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+:focus-visible {
+  outline: 3px solid var(--hot);
+  outline-offset: 2px;
+}
+
 ::selection {
   background: var(--jev);
   color: #111110;
@@ -152,18 +171,18 @@ body {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.02em;
-    box-shadow: 4px 4px 0 #111110;
+    box-shadow: 4px 4px 0 var(--btn-shadow);
     transition:
       transform 0.08s ease,
       box-shadow 0.08s ease;
   }
   .btn:hover {
     transform: translate(-1px, -1px);
-    box-shadow: 5px 5px 0 #111110;
+    box-shadow: 5px 5px 0 var(--btn-shadow);
   }
   .btn:active {
     transform: translate(3px, 3px);
-    box-shadow: 1px 1px 0 #111110;
+    box-shadow: 1px 1px 0 var(--btn-shadow);
   }
   .btn:disabled {
     opacity: 0.6;
@@ -199,17 +218,13 @@ body {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
   }
+  /* Highlighter band; the ink stays dark so it reads on both themes. */
   .highlight {
-    background: linear-gradient(
-      transparent 55%,
-      var(--jev) 55%,
-      var(--jev) 92%,
-      transparent 92%
-    );
-  }
-  .dark .highlight,
-  [data-theme="dark"] .highlight {
-    color: var(--ink);
+    background: var(--jev);
+    color: #111110;
+    padding: 0 0.15em;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
   }
   .halftone {
     background-image: radial-gradient(var(--ink) 1px, transparent 1.2px);

@@ -72,7 +72,7 @@ export function JudgeForm({
             placeholder="yourbusiness.com"
             aria-invalid={failure?.field === "url" ? true : undefined}
             aria-describedby={failure ? "judge-error" : undefined}
-            className={`min-w-0 flex-1 border-[3px] border-line bg-card font-mono text-ink shadow-[4px_4px_0_var(--shadow)] outline-none placeholder:text-ink-soft/60 focus:bg-jev/20 ${
+            className={`min-w-0 flex-1 border-[3px] border-line bg-card font-mono text-ink shadow-[4px_4px_0_var(--shadow)] placeholder:text-ink-soft/60 focus:bg-jev/20 focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-hot ${
               big ? "px-4 py-4 text-xl" : "px-3 py-2.5 text-base"
             }`}
           />
