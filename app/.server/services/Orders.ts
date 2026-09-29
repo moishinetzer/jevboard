@@ -1,9 +1,9 @@
-import { Context, Effect, Layer, Option } from "effect";
+import { Context, Effect, Layer, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { JUDGMENT_PRICE_CENTS } from "~/lib/format";
 import { NotFound } from "../domain/errors";
 import { type CustomerId, type EntryId, type JudgmentId, makeOrderId, type OrderId } from "../domain/ids";
-import { IN_FLIGHT_STATUSES, type Order, type OrderKind, type OrderStatus } from "../domain/models";
+import { IN_FLIGHT_STATUSES, type Order, type OrderKind, type OrderStatus, Verdict } from "../domain/models";
 
 interface OrderRow {
   readonly id: string;
@@ -21,13 +21,38 @@ interface OrderRow {
   readonly paidAt: number | null;
   readonly completedAt: number | null;
   readonly updatedAt: number;
+  readonly verdictJson?: string | null;
+  readonly model?: string | null;
+  readonly pagesCrawled?: string | null;
+  readonly ogImage?: string | null;
 }
 
+/** Jev's verdict, parked on the order between the judging and placement stages. */
+export interface StagedVerdict {
+  readonly verdict: Verdict;
+  readonly model: string;
+  readonly pagesCrawled: ReadonlyArray<string>;
+  readonly ogImage: string | null;
+}
+
+const decodeVerdict = Schema.decodeUnknownOption(Schema.fromJsonString(Verdict));
+
 const toOrder = (row: OrderRow): Order => ({
-  ...row,
   id: row.id as OrderId,
+  customerId: row.customerId,
+  siteKey: row.siteKey,
+  url: row.url,
+  kind: row.kind,
+  status: row.status,
+  stageDetail: row.stageDetail,
+  error: row.error,
+  amountCents: row.amountCents,
   entryId: row.entryId as EntryId | null,
   judgmentId: row.judgmentId as JudgmentId | null,
+  createdAt: row.createdAt,
+  paidAt: row.paidAt,
+  completedAt: row.completedAt,
+  updatedAt: row.updatedAt,
 });
 
 /**
@@ -52,6 +77,12 @@ export class Orders extends Context.Service<
     readonly setDetail: (id: OrderId, detail: string) => Effect.Effect<void>;
     readonly complete: (id: OrderId, result: { readonly entryId: EntryId; readonly judgmentId: JudgmentId }) => Effect.Effect<void>;
     readonly fail: (id: OrderId, error: string) => Effect.Effect<void>;
+    /** Parks Jev's verdict on the order until the placement stage picks it up. */
+    readonly stageVerdict: (id: OrderId, staged: StagedVerdict) => Effect.Effect<void>;
+    /** The parked verdict, if the judging stage already finished. */
+    readonly stagedVerdict: (id: OrderId) => Effect.Effect<Option.Option<StagedVerdict>>;
+    /** In-flight orders not touched since `before` (epoch ms) — re-queued by the cron trigger. */
+    readonly stalled: (before: number) => Effect.Effect<ReadonlyArray<Order>>;
     /** failed -> paid, so a paid-for judgment can be retried for free. */
     readonly retry: (id: OrderId) => Effect.Effect<boolean>;
     /** Orders a worker must (re)process, oldest first — used on boot for crash recovery. */
@@ -152,10 +183,42 @@ export class Orders extends Context.Service<
           WHERE id = ${id}`;
       }, Effect.orDie);
 
+      const stageVerdict = Effect.fn("Orders.stageVerdict")(function* (id: OrderId, staged: StagedVerdict) {
+        yield* sql`
+          UPDATE orders SET verdict_json = ${JSON.stringify(staged.verdict)}, model = ${staged.model},
+            pages_crawled = ${JSON.stringify(staged.pagesCrawled)}, og_image = ${staged.ogImage},
+            updated_at = ${Date.now()}
+          WHERE id = ${id}`;
+      }, Effect.orDie);
+
+      const stagedVerdict = Effect.fn("Orders.stagedVerdict")(function* (id: OrderId) {
+        const rows = yield* sql<OrderRow>`SELECT * FROM orders WHERE id = ${id}`;
+        const row = rows[0];
+        if (!row?.verdictJson) return Option.none<StagedVerdict>();
+        return Option.map(decodeVerdict(row.verdictJson), (verdict): StagedVerdict => {
+          let pagesCrawled: ReadonlyArray<string> = [];
+          try {
+            const parsed: unknown = JSON.parse(row.pagesCrawled ?? "[]");
+            if (Array.isArray(parsed)) pagesCrawled = parsed.filter((url): url is string => typeof url === "string");
+          } catch {
+            // Keep the verdict even if the page list is unreadable.
+          }
+          return { verdict, model: row.model ?? "unknown", pagesCrawled, ogImage: row.ogImage ?? null };
+        });
+      }, Effect.orDie);
+
+      const stalled = Effect.fn("Orders.stalled")(function* (before: number) {
+        const rows = yield* sql<OrderRow>`
+          SELECT * FROM orders WHERE status IN ${sql.in(IN_FLIGHT_STATUSES)} AND updated_at < ${before}
+          ORDER BY updated_at ASC LIMIT 50`;
+        return rows.map(toOrder);
+      }, Effect.orDie);
+
       const retry = Effect.fn("Orders.retry")(function* (id: OrderId) {
         const rows = yield* sql<{ id: string }>`
           UPDATE orders
-          SET status = 'paid', error = NULL, stage_detail = 'Retrying. Jev is giving it another go.', updated_at = ${Date.now()}
+          SET status = 'paid', error = NULL, verdict_json = NULL,
+              stage_detail = 'Retrying. Jev is giving it another go.', updated_at = ${Date.now()}
           WHERE id = ${id} AND status = 'failed'
           RETURNING id`;
         return rows.length > 0;
@@ -192,6 +255,9 @@ export class Orders extends Context.Service<
         setDetail,
         complete,
         fail,
+        stageVerdict,
+        stagedVerdict,
+        stalled,
         retry,
         inFlight,
         awaitingPayment,

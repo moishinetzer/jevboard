@@ -1,6 +1,5 @@
 import { Effect, Layer } from "effect";
 import { AppConfig } from "~/.server/config";
-import { DatabaseLive } from "~/.server/db/Database";
 import { CrawlError } from "~/.server/domain/errors";
 import type { SiteSnapshot, Verdict } from "~/.server/domain/models";
 import { Board } from "~/.server/services/Board";
@@ -8,6 +7,7 @@ import { Crawler } from "~/.server/services/Crawler";
 import { Judge } from "~/.server/services/Judge";
 import { Orders } from "~/.server/services/Orders";
 import { Pipeline } from "~/.server/services/Pipeline";
+import { SqliteLocal } from "./sqlite";
 
 export const snapshotFor = (siteKey: string): SiteSnapshot => ({
   requestedUrl: `https://${siteKey}/`,
@@ -89,7 +89,7 @@ export const FakeCrawler = (unreachable: ReadonlyArray<string> = []) =>
 
 /** Fresh in-memory database + repositories + pipeline for one test. */
 export const makeTestLayer = (script: Script, unreachable: ReadonlyArray<string> = []) => {
-  const repos = Layer.mergeAll(Board.layer, Orders.layer).pipe(Layer.provideMerge(DatabaseLive));
+  const repos = Layer.mergeAll(Board.layer, Orders.layer).pipe(Layer.provideMerge(SqliteLocal()));
   return Pipeline.layer.pipe(
     Layer.provideMerge(repos),
     Layer.provide(Layer.mergeAll(ScriptedJudge(script), FakeCrawler(unreachable))),

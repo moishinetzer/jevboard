@@ -1,26 +1,34 @@
 import { Effect, Layer } from "effect";
+import { SqlClient } from "effect/sql";
 import { Payments } from "../Payments";
-
-declare global {
-  // Survives dev-server HMR so a simulated payment isn't forgotten mid-flow.
-  var __jevFakePaid: Set<string> | undefined;
-}
 
 /**
  * Simulated checkout for local development (no AUTUMN_SECRET_KEY).
  * The buyer is sent to /dev/checkout/:orderId, a fake payment page; pressing
- * "pay" there marks the order paid in memory.
+ * "pay" there records the payment in the `fake_payments` table (shared by
+ * every Worker isolate, unlike memory).
  */
-export const FakePaymentsLive = Layer.sync(Payments, () => {
-  const paid = (globalThis.__jevFakePaid ??= new Set<string>());
-  return Payments.of({
-    kind: "fake",
-    createCheckout: (input) =>
-      Effect.succeed({
-        _tag: "Redirect" as const,
-        url: `/dev/checkout/${encodeURIComponent(input.orderId)}?return=${encodeURIComponent(input.successUrl)}`,
-      }),
-    confirm: ({ orderId }) => Effect.sync(() => (paid.has(orderId) ? ("paid" as const) : ("unpaid" as const))),
-    simulatePayment: (orderId) => Effect.sync(() => void paid.add(orderId)),
-  });
-});
+export const FakePaymentsLive = Layer.effect(
+  Payments,
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    return Payments.of({
+      kind: "fake",
+      createCheckout: (input) =>
+        Effect.succeed({
+          _tag: "Redirect" as const,
+          url: `/dev/checkout/${encodeURIComponent(input.orderId)}?return=${encodeURIComponent(input.successUrl)}`,
+        }),
+      confirm: ({ orderId }) =>
+        sql<{ orderId: string }>`SELECT order_id FROM fake_payments WHERE order_id = ${orderId}`.pipe(
+          Effect.map((rows) => (rows.length > 0 ? ("paid" as const) : ("unpaid" as const))),
+          Effect.orDie,
+        ),
+      simulatePayment: (orderId) =>
+        sql`INSERT OR IGNORE INTO fake_payments (order_id, paid_at) VALUES (${orderId}, ${Date.now()})`.pipe(
+          Effect.asVoid,
+          Effect.orDie,
+        ),
+    });
+  }),
+);

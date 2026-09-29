@@ -1,11 +1,10 @@
 import { Schema } from "effect";
-import { randomBytes } from "node:crypto";
 
 const ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 /** URL-safe random id. 22 base62 chars ≈ 131 bits, 10 chars ≈ 59 bits. */
 export const randomId = (length: number): string => {
-  const bytes = randomBytes(length * 2);
+  const bytes = crypto.getRandomValues(new Uint8Array(length * 2));
   let out = "";
   for (let i = 0; out.length < length && i < bytes.length; i++) {
     const byte = bytes[i]!;

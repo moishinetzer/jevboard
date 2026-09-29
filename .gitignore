@@ -1,12 +1,16 @@
 .DS_Store
 .env
+.dev.vars
 /node_modules/
 
 # React Router
 /.react-router/
 /build/
 
-# Local database
+# Cloudflare
+/.wrangler/
+
+# Local databases / generated seed
 /data/
 *.db
 *.db-shm

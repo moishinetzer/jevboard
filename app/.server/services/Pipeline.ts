@@ -1,10 +1,10 @@
-import { Cause, Context, Effect, Layer, Random, Schedule, Semaphore } from "effect";
+import { Cause, Context, Effect, Layer, Option, Random, Schedule, Semaphore } from "effect";
 import type { CrawlError, JudgeError } from "../domain/errors";
 import type { OrderId } from "../domain/ids";
 import { type DuelContender, TERMINAL_STATUSES, type Verdict } from "../domain/models";
 import { Board, type DuelRecord, type PlacementResult } from "./Board";
 import { Crawler } from "./Crawler";
-import { Judge, type JudgeResult } from "./Judge";
+import { Judge } from "./Judge";
 import { Orders } from "./Orders";
 
 /** Up to 2 retries with jittered exponential backoff for transient failures. */
@@ -53,18 +53,26 @@ const judgeFailureMessage = (error: JudgeError): string =>
     ? "Jev declined to judge this one."
     : "Jev's brain short-circuited while judging. Retry for free — you already paid.";
 
+/** Outcome of the judging stage. */
+export type JudgeStageResult = "judged" | "skipped" | "failed";
+
 /**
- * Turns a paid order into a placed verdict:
+ * Turns a paid order into a placed verdict, in two stages:
  *
- *   crawl → judge → tiebreak duels (binary insertion) → atomic placement
+ *   1. judge:  crawl → Jev's verdict (parked on the order row)
+ *   2. place:  tiebreak duels (binary insertion) → atomic placement
  *
- * Every stage writes progress to the order row, which the judging page polls.
- * Placement runs under a global lock so concurrent judgments never interleave
- * inside the same tie group.
+ * On Cloudflare the stages run as jobs on two queues; the placement queue
+ * processes one job at a time so concurrent verdicts never interleave inside
+ * a tie group. Both stages are idempotent (queues deliver at least once).
+ * Every step writes progress to the order row, which the judging page polls.
  */
 export class Pipeline extends Context.Service<
   Pipeline,
   {
+    readonly judge: (orderId: OrderId) => Effect.Effect<JudgeStageResult>;
+    readonly place: (orderId: OrderId) => Effect.Effect<void>;
+    /** Both stages back to back (in-process queue, tests). */
     readonly run: (orderId: OrderId) => Effect.Effect<void>;
   }
 >()("jevboard/Pipeline") {
@@ -75,6 +83,7 @@ export class Pipeline extends Context.Service<
       const board = yield* Board;
       const crawler = yield* Crawler;
       const judge = yield* Judge;
+      // Belt and braces for in-process use; on Cloudflare the placement queue serializes.
       const placementLock = yield* Semaphore.make(1);
 
       /**
@@ -143,33 +152,10 @@ export class Pipeline extends Context.Service<
         return { tieOrder, duels };
       });
 
-      const place = Effect.fn("Pipeline.place")(function* (
-        orderId: OrderId,
-        order: { readonly siteKey: string; readonly url: string },
-        result: JudgeResult,
-        snapshot: Parameters<typeof board.commitPlacement>[0]["snapshot"],
-      ) {
-        const { verdict } = result;
-        const flagged = verdict.contentFlag !== "none";
-        const { tieOrder, duels } = flagged ? { tieOrder: [], duels: [] } : yield* tiebreak(orderId, order.siteKey, verdict);
-        const pagesCrawled = [...new Set([...snapshot.pages.map((page) => page.url), ...result.pagesFetchedByJev])];
-        return yield* board.commitPlacement({
-          orderId,
-          siteKey: order.siteKey,
-          url: order.url,
-          host: hostOf(order.url),
-          verdict,
-          snapshot,
-          model: result.model,
-          pagesCrawled,
-          tieOrder,
-          duels,
-        });
-      });
-
-      const process = Effect.fn("Pipeline.process")(function* (orderId: OrderId) {
+      const judgeStage = Effect.fn("Pipeline.judge")(function* (orderId: OrderId) {
         const order = yield* orders.get(orderId);
-        if (order.status === "pending_payment" || TERMINAL_STATUSES.includes(order.status)) return;
+        if (order.status === "pending_payment" || TERMINAL_STATUSES.includes(order.status)) return "skipped" as const;
+        if (Option.isSome(yield* orders.stagedVerdict(orderId))) return "judged" as const;
         const host = hostOf(order.url);
 
         yield* orders.setStage(orderId, "crawling", `Jev is knocking on ${host}…`);
@@ -182,7 +168,7 @@ export class Pipeline extends Context.Service<
         const pageList = snapshot.pages.map((page) => new URL(page.url).pathname).join(", ");
 
         const existing = yield* board.findBySiteKey(order.siteKey);
-        const roll = (existing._tag === "Some" ? existing.value.rolls : 0) + 1;
+        const roll = (Option.isSome(existing) ? existing.value.rolls : 0) + 1;
         yield* orders.setStage(
           orderId,
           "judging",
@@ -192,10 +178,42 @@ export class Pipeline extends Context.Service<
           .judge({ siteKey: order.siteKey, url: order.url, snapshot, roll, fresh: order.kind === "reroll" })
           .pipe(Effect.retry({ schedule: transientRetry, while: (error: JudgeError) => error.retryable }));
 
-        yield* orders.setStage(orderId, "tiebreaking", `Jev scored it ${result.verdict.score}/1000. Finding its place on the board…`);
-        const placement: PlacementResult = yield* Semaphore.withPermit(placementLock)(
-          place(orderId, order, result, snapshot),
+        yield* orders.stageVerdict(orderId, {
+          verdict: result.verdict,
+          model: result.model,
+          pagesCrawled: [...new Set([...snapshot.pages.map((page) => page.url), ...result.pagesFetchedByJev])],
+          ogImage: snapshot.ogImage,
+        });
+        yield* orders.setStage(
+          orderId,
+          "tiebreaking",
+          `Jev scored it ${result.verdict.score}/1000. Finding its place on the board…`,
         );
+        return "judged" as const;
+      });
+
+      const placeStage = Effect.fn("Pipeline.place")(function* (orderId: OrderId) {
+        const order = yield* orders.get(orderId);
+        if (order.status === "pending_payment" || TERMINAL_STATUSES.includes(order.status)) return;
+        const staged = yield* orders.stagedVerdict(orderId);
+        if (Option.isNone(staged)) {
+          return yield* Effect.logWarning("Placement requested before a verdict was staged", { orderId });
+        }
+        const { verdict, model, pagesCrawled, ogImage } = staged.value;
+        const flagged = verdict.contentFlag !== "none";
+        const { tieOrder, duels } = flagged ? { tieOrder: [], duels: [] } : yield* tiebreak(orderId, order.siteKey, verdict);
+        const placement: PlacementResult = yield* board.commitPlacement({
+          orderId,
+          siteKey: order.siteKey,
+          url: order.url,
+          host: hostOf(order.url),
+          verdict,
+          ogImage,
+          model,
+          pagesCrawled,
+          tieOrder,
+          duels,
+        });
         yield* orders.complete(orderId, { entryId: placement.entryId, judgmentId: placement.judgmentId });
         yield* Effect.logInfo("Judgment placed", {
           siteKey: placement.siteKey,
@@ -205,28 +223,45 @@ export class Pipeline extends Context.Service<
         });
       });
 
-      const run = (orderId: OrderId) =>
-        process(orderId).pipe(
-          Effect.catchTags({
-            NotFound: () => Effect.logWarning("Order vanished", { orderId }),
-            CrawlError: (error) =>
-              Effect.logWarning("Crawl failed", error).pipe(Effect.andThen(orders.fail(orderId, crawlFailureMessage(error)))),
-            JudgeError: (error) =>
-              Effect.logError("Judge failed", error).pipe(Effect.andThen(orders.fail(orderId, judgeFailureMessage(error)))),
+      /** Maps failures to a failed order (with a friendly reason) so the buyer can retry for free. */
+      const guard = <A, E>(orderId: OrderId, onFailure: A, effect: Effect.Effect<A, E>): Effect.Effect<A> =>
+        effect.pipe(
+          Effect.catchCause((cause) => {
+            // On shutdown/eviction the order stays in flight; the queue or cron retries it.
+            if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt;
+            const error = Cause.findErrorOption(cause);
+            const tag = Option.isSome(error) ? (error.value as { readonly _tag?: string })._tag : undefined;
+            if (tag === "NotFound") return Effect.logWarning("Order vanished", { orderId }).pipe(Effect.as(onFailure));
+            const message =
+              tag === "CrawlError"
+                ? crawlFailureMessage(Option.getOrThrow(error) as unknown as CrawlError)
+                : tag === "JudgeError"
+                  ? judgeFailureMessage(Option.getOrThrow(error) as unknown as JudgeError)
+                  : "Something broke inside Jev. Retry for free — you already paid.";
+            return Effect.logError("Judgment failed", cause).pipe(
+              Effect.andThen(orders.fail(orderId, message)),
+              Effect.as(onFailure),
+            );
           }),
-          Effect.catchCause((cause) =>
-            // On shutdown the order stays in flight and is picked up again on boot.
-            Cause.hasInterruptsOnly(cause)
-              ? Effect.failCause(cause)
-              : Effect.logError("Pipeline defect", cause).pipe(
-                  Effect.andThen(orders.fail(orderId, "Something broke inside Jev. Retry for free — you already paid.")),
-                ),
-          ),
           Effect.annotateLogs({ orderId }),
-          Effect.withSpan("Pipeline.run", { attributes: { orderId } }),
         );
 
-      return Pipeline.of({ run });
+      const judgeGuarded = (orderId: OrderId) =>
+        guard(orderId, "failed" as JudgeStageResult, judgeStage(orderId)).pipe(Effect.withSpan("Pipeline.judgeJob"));
+
+      const placeGuarded = (orderId: OrderId) =>
+        guard(orderId, undefined as void, Semaphore.withPermit(placementLock)(placeStage(orderId))).pipe(
+          Effect.withSpan("Pipeline.placeJob"),
+        );
+
+      return Pipeline.of({
+        judge: judgeGuarded,
+        place: placeGuarded,
+        run: (orderId) =>
+          judgeGuarded(orderId).pipe(
+            Effect.flatMap((result) => (result === "judged" ? placeGuarded(orderId) : Effect.void)),
+          ),
+      });
     }),
   );
 }

@@ -1,5 +1,6 @@
 import { Context, Effect, Layer, Option } from "effect";
 import { SqlClient, type Statement } from "effect/sql";
+import { SqlBatch } from "../db/SqlBatch";
 import { NotFound } from "../domain/errors";
 import { type EntryId, type JudgmentId, makeEntryId, makeJudgmentId, type OrderId, randomId } from "../domain/ids";
 import {
@@ -13,7 +14,6 @@ import {
   IN_FLIGHT_STATUSES,
   type Judgment,
   type Reign,
-  type SiteSnapshot,
   type SubScores,
   type Verdict,
 } from "../domain/models";
@@ -186,7 +186,8 @@ export interface CommitPlacementInput {
   readonly url: string;
   readonly host: string;
   readonly verdict: Verdict;
-  readonly snapshot: SiteSnapshot;
+  /** og:image found while crawling, shown on the verdict page. */
+  readonly ogImage: string | null;
   readonly model: string;
   readonly pagesCrawled: ReadonlyArray<string>;
   /**
@@ -305,6 +306,7 @@ export class Board extends Context.Service<
     Board,
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
+      const batch = yield* SqlBatch;
 
       const ranked = sql`
         SELECT e.*, ROW_NUMBER() OVER (ORDER BY e.score DESC, e.tie_rank ASC, e.first_judged_at ASC) AS rank
@@ -408,11 +410,6 @@ export class Board extends Context.Service<
         );
       }, Effect.orDie);
 
-      const kingId = sql<{ id: string }>`
-        SELECT id FROM entries WHERE hidden = 0 ORDER BY score DESC, tie_rank ASC, first_judged_at ASC LIMIT 1`.pipe(
-        Effect.map((rows) => rows[0]?.id ?? null),
-      );
-
       const rankOf = (id: string) =>
         sql<{ rank: number }>`WITH ranked AS (${ranked}) SELECT rank FROM ranked WHERE id = ${id}`.pipe(
           Effect.map((rows) => rows[0]?.rank ?? null),
@@ -441,39 +438,80 @@ export class Board extends Context.Service<
           createdAt: event.createdAt,
         })}`;
 
+      /**
+       * Writes a finished judgment and its placement.
+       *
+       * D1 has no interactive transactions, so this reads everything it needs
+       * first, derives the new rank and throne holder, and then commits every
+       * write in one atomic batch. That's only correct because placements are
+       * serialized (the placement queue runs one job at a time), which the tie
+       * group ordering requires anyway.
+       */
       const commitPlacement = Effect.fn("Board.commitPlacement")(
         function* (input: CommitPlacementInput) {
           const now = Date.now();
           const { verdict } = input;
+          const S = verdict.score;
+          const hidden = verdict.contentFlag !== "none";
+
+          // ---- Read phase -------------------------------------------------
           const existing = (yield* sql<EntryRow>`SELECT * FROM entries WHERE site_key = ${input.siteKey}`)[0];
-          const kingBefore = yield* kingId;
-          const previousRank = existing ? yield* rankOf(existing.id) : null;
+          const kingBeforeRow = (yield* sql<{ id: string; siteKey: string }>`
+            SELECT id, site_key FROM entries WHERE hidden = 0
+            ORDER BY score DESC, tie_rank ASC, first_judged_at ASC LIMIT 1`)[0];
+          const kingBefore = kingBeforeRow?.id ?? null;
+          const previousRank = existing && existing.hidden === 0 ? yield* rankOf(existing.id) : null;
+          const [numbers] = yield* sql<{ nextEntry: number; nextSerial: number }>`
+            SELECT (SELECT COALESCE(MAX(entry_number), 0) + 1 FROM entries) AS next_entry,
+                   (SELECT COALESCE(MAX(serial), 0) + 1 FROM judgments) AS next_serial`;
+          const [above] = yield* sql<{ count: number }>`
+            SELECT COUNT(*) AS count FROM entries WHERE hidden = 0 AND site_key != ${input.siteKey} AND score > ${S}`;
+          // Best visible entry other than this one (its tie rank may be about to change).
+          const topOther = (yield* sql<{ id: string; siteKey: string; score: number }>`
+            SELECT id, site_key, score FROM entries WHERE hidden = 0 AND site_key != ${input.siteKey}
+            ORDER BY score DESC, tie_rank ASC, first_judged_at ASC LIMIT 1`)[0];
 
           const entryId = (existing?.id as EntryId | undefined) ?? makeEntryId();
           const judgmentId = makeJudgmentId();
           const roll = (existing?.rolls ?? 0) + 1;
           const previousScore = existing?.score ?? null;
-          const delta = previousScore === null ? 0 : verdict.score - previousScore;
-          const ogImage = input.snapshot.ogImage;
-          const hidden = verdict.contentFlag !== "none";
+          const delta = previousScore === null ? 0 : S - previousScore;
           const subscores = JSON.stringify(verdict.subscores);
+          const tieOrder = input.tieOrder.map((id) => id ?? entryId);
+          const position = Math.max(0, tieOrder.indexOf(entryId));
+
+          // New rank and new #1, derived exactly from the reads above.
+          const rank = hidden ? 0 : (above?.count ?? 0) + position + 1;
+          let kingAfter: { id: string; siteKey: string } | null;
+          if (!hidden && rank === 1) kingAfter = { id: entryId, siteKey: input.siteKey };
+          else if (!topOther) kingAfter = null;
+          else if (!hidden && topOther.score === S) {
+            // The top group is the one we just re-ordered: its new head is the king.
+            const headId = tieOrder[0]!;
+            const headSiteKey = headId === topOther.id ? topOther.siteKey : (yield* sql<{ siteKey: string }>`
+              SELECT site_key FROM entries WHERE id = ${headId}`)[0]?.siteKey ?? topOther.siteKey;
+            kingAfter = { id: headId, siteKey: headSiteKey };
+          } else kingAfter = { id: topOther.id, siteKey: topOther.siteKey };
+          const crowned = kingAfter?.id === entryId && kingBefore !== entryId;
+
+          // ---- Write phase: one atomic batch ------------------------------
+          const writes: Array<Statement.Statement<unknown>> = [];
 
           if (existing) {
-            yield* sql`
+            writes.push(sql`
               UPDATE entries SET
                 url = ${input.url}, host = ${input.host}, name = ${verdict.name}, tldr = ${verdict.tldr},
                 verdict = ${verdict.verdict}, category = ${verdict.category}, label = ${verdict.label},
-                subscores = ${subscores}, score = ${verdict.score},
+                subscores = ${subscores}, score = ${S},
                 judgment_id = ${judgmentId}, rolls = ${roll},
-                best_score = ${Math.max(existing.bestScore, verdict.score)},
-                worst_score = ${Math.min(existing.worstScore, verdict.score)},
+                best_score = ${Math.max(existing.bestScore, S)},
+                worst_score = ${Math.min(existing.worstScore, S)},
                 last_delta = ${delta}, manipulation_attempt = ${verdict.manipulationAttempt ? 1 : 0},
                 hidden = ${hidden ? 1 : 0}, content_flag = ${verdict.contentFlag},
-                og_image = ${ogImage}, last_judged_at = ${now}
-              WHERE id = ${entryId}`;
+                og_image = ${input.ogImage}, last_judged_at = ${now}
+              WHERE id = ${entryId}`);
           } else {
-            const [numbering] = yield* sql<{ next: number }>`SELECT COALESCE(MAX(entry_number), 0) + 1 AS next FROM entries`;
-            yield* sql`INSERT INTO entries ${sql.insert({
+            writes.push(sql`INSERT INTO entries ${sql.insert({
               id: entryId,
               siteKey: input.siteKey,
               url: input.url,
@@ -484,42 +522,38 @@ export class Board extends Context.Service<
               category: verdict.category,
               label: verdict.label,
               subscores,
-              score: verdict.score,
+              score: S,
               tieRank: 0,
               judgmentId,
               rolls: 1,
-              bestScore: verdict.score,
-              worstScore: verdict.score,
+              bestScore: S,
+              worstScore: S,
               lastDelta: 0,
               manipulationAttempt: verdict.manipulationAttempt ? 1 : 0,
               hidden: hidden ? 1 : 0,
               contentFlag: verdict.contentFlag,
-              ogImage,
-              entryNumber: numbering?.next ?? 1,
+              ogImage: input.ogImage,
+              entryNumber: numbers?.nextEntry ?? 1,
               clicks: 0,
               firstJudgedAt: now,
               lastJudgedAt: now,
-            })}`;
+            })}`);
           }
 
           // Jev's tiebreak order becomes the tie_rank of the whole group.
           if (!hidden) {
-            const tieOrder = input.tieOrder.map((id) => id ?? entryId);
             for (const [index, id] of tieOrder.entries()) {
-              yield* sql`UPDATE entries SET tie_rank = ${index} WHERE id = ${id}`;
+              writes.push(sql`UPDATE entries SET tie_rank = ${index} WHERE id = ${id}`);
             }
           }
 
-          const rank = hidden ? 0 : ((yield* rankOf(entryId)) ?? 1);
-          const [serial] = yield* sql<{ next: number }>`SELECT COALESCE(MAX(serial), 0) + 1 AS next FROM judgments`;
-
-          yield* sql`INSERT INTO judgments ${sql.insert({
+          writes.push(sql`INSERT INTO judgments ${sql.insert({
             id: judgmentId,
-            serial: serial?.next ?? 1,
+            serial: numbers?.nextSerial ?? 1,
             entryId,
             orderId: input.orderId,
             roll,
-            score: verdict.score,
+            score: S,
             previousScore,
             rankAtPlacement: rank,
             name: verdict.name,
@@ -537,151 +571,129 @@ export class Board extends Context.Service<
             pagesCrawled: JSON.stringify(input.pagesCrawled),
             model: input.model,
             createdAt: now,
-          })}`;
+          })}`);
 
-          for (const duel of input.duels) {
-            yield* sql`INSERT INTO duels ${sql.insert({
+          for (const [seq, duel] of input.duels.entries()) {
+            writes.push(sql`INSERT INTO duels ${sql.insert({
               id: `d${randomId(14)}`,
               judgmentId,
               challengerId: entryId,
               opponentId: duel.opponentId,
               winnerId: duel.challengerWon ? entryId : duel.opponentId,
               reason: duel.reason,
-              score: verdict.score,
+              score: S,
+              seq,
               createdAt: now,
-            })}`;
+            })}`);
           }
 
-          if (hidden) {
-            // Declined sites never reach the tape; a king that got flagged loses the crown quietly.
-            const kingAfterHidden = yield* kingId;
-            if (kingBefore === entryId && kingAfterHidden !== entryId) {
-              yield* sql`UPDATE reigns SET ended_at = ${now} WHERE entry_id = ${entryId} AND ended_at IS NULL`;
-              if (kingAfterHidden !== null) {
-                yield* sql`INSERT INTO reigns ${sql.insert({ entryId: kingAfterHidden, startedAt: now, endedAt: null })}`;
-              }
-            }
-            return {
-              entryId,
-              judgmentId,
-              siteKey: input.siteKey,
-              roll,
-              score: verdict.score,
-              previousScore,
-              rank: 0,
-              previousRank,
-              crowned: false,
-              hidden: true,
-            } satisfies PlacementResult;
-          }
-
-          // Ticker events
-          if (previousScore === null) {
-            yield* insertEvent({
-              kind: "placed",
-              entryId,
-              siteKey: input.siteKey,
-              score: verdict.score,
-              rank,
-              message: `🆕 ${input.siteKey} entered the board at #${rank} with ${verdict.score}/1000`,
-              createdAt: now,
-            });
-          } else {
-            yield* insertEvent({
-              kind: "rerolled",
-              entryId,
-              siteKey: input.siteKey,
-              score: verdict.score,
-              rank,
-              delta,
-              message: `🎲 ${input.siteKey} rerolled: ${previousScore} → ${verdict.score} (${signed(delta)}), now #${rank}`,
-              createdAt: now,
-            });
-          }
-
-          if (input.duels.length > 0) {
-            const wins = input.duels.filter((duel) => duel.challengerWon).length;
-            const last = input.duels[input.duels.length - 1]!;
-            yield* insertEvent({
-              kind: "duel",
-              entryId,
-              siteKey: input.siteKey,
-              otherSiteKey: last.opponentSiteKey,
-              score: verdict.score,
-              rank,
-              message: `⚔️ ${input.siteKey} tied at ${verdict.score} and fought ${input.duels.length} tiebreak duel${input.duels.length === 1 ? "" : "s"} (${wins}W ${input.duels.length - wins}L)`,
-              createdAt: now,
-            });
-          }
-
-          if (verdict.manipulationAttempt) {
-            yield* insertEvent({
-              kind: "bribe",
-              entryId,
-              siteKey: input.siteKey,
-              score: verdict.score,
-              message: `🚨 ${input.siteKey} tried to sweet-talk Jev. Jev noticed.`,
-              createdAt: now,
-            });
-          }
-
-          // Changes at the top of the board
-          const kingAfter = yield* kingId;
-          const crowned = kingAfter === entryId && kingBefore !== entryId;
-          if (kingAfter !== kingBefore) {
-            if (kingBefore !== null) {
-              yield* sql`UPDATE reigns SET ended_at = ${now} WHERE entry_id = ${kingBefore} AND ended_at IS NULL`;
-              const fallen = (yield* sql<{ siteKey: string }>`SELECT site_key FROM entries WHERE id = ${kingBefore}`)[0];
-              if (fallen) {
-                const usurper =
-                  kingAfter === entryId
-                    ? input.siteKey
-                    : ((yield* sql<{ siteKey: string }>`SELECT site_key FROM entries WHERE id = ${kingAfter}`)[0]?.siteKey ?? "someone");
-                yield* insertEvent({
-                  kind: "dethroned",
-                  entryId: kingBefore,
-                  siteKey: fallen.siteKey,
-                  otherSiteKey: usurper,
-                  message:
-                    kingBefore === entryId
-                      ? `💀 ${fallen.siteKey} rerolled itself off the throne. ${usurper} inherits the crown.`
-                      : `💀 ${fallen.siteKey} was dethroned by ${usurper}`,
+          // Ticker events (declined sites never reach the tape).
+          if (!hidden) {
+            writes.push(
+              previousScore === null
+                ? insertEvent({
+                    kind: "placed",
+                    entryId,
+                    siteKey: input.siteKey,
+                    score: S,
+                    rank,
+                    message: `🆕 ${input.siteKey} entered the board at #${rank} with ${S}/1000`,
+                    createdAt: now,
+                  })
+                : insertEvent({
+                    kind: "rerolled",
+                    entryId,
+                    siteKey: input.siteKey,
+                    score: S,
+                    rank,
+                    delta,
+                    message: `🎲 ${input.siteKey} rerolled: ${previousScore} → ${S} (${signed(delta)}), now #${rank}`,
+                    createdAt: now,
+                  }),
+            );
+            if (input.duels.length > 0) {
+              const wins = input.duels.filter((duel) => duel.challengerWon).length;
+              const last = input.duels[input.duels.length - 1]!;
+              writes.push(
+                insertEvent({
+                  kind: "duel",
+                  entryId,
+                  siteKey: input.siteKey,
+                  otherSiteKey: last.opponentSiteKey,
+                  score: S,
+                  rank,
+                  message: `⚔️ ${input.siteKey} tied at ${S} and fought ${input.duels.length} tiebreak duel${input.duels.length === 1 ? "" : "s"} (${wins}W ${input.duels.length - wins}L)`,
                   createdAt: now,
-                });
+                }),
+              );
+            }
+            if (verdict.manipulationAttempt) {
+              writes.push(
+                insertEvent({
+                  kind: "bribe",
+                  entryId,
+                  siteKey: input.siteKey,
+                  score: S,
+                  message: `🚨 ${input.siteKey} tried to sweet-talk Jev. Jev noticed.`,
+                  createdAt: now,
+                }),
+              );
+            }
+          }
+
+          // Changes at the top of the board.
+          if ((kingAfter?.id ?? null) !== kingBefore) {
+            if (kingBeforeRow) {
+              writes.push(sql`UPDATE reigns SET ended_at = ${now} WHERE entry_id = ${kingBeforeRow.id} AND ended_at IS NULL`);
+              if (!hidden || kingBeforeRow.id !== entryId) {
+                const usurper = kingAfter?.siteKey ?? "nobody";
+                writes.push(
+                  insertEvent({
+                    kind: "dethroned",
+                    entryId: kingBeforeRow.id,
+                    siteKey: kingBeforeRow.siteKey,
+                    otherSiteKey: usurper,
+                    message:
+                      kingBeforeRow.id === entryId
+                        ? `💀 ${kingBeforeRow.siteKey} rerolled itself off the throne. ${usurper} inherits the crown.`
+                        : `💀 ${kingBeforeRow.siteKey} was dethroned by ${usurper}`,
+                    createdAt: now,
+                  }),
+                );
               }
             }
-            if (kingAfter !== null) {
-              yield* sql`INSERT INTO reigns ${sql.insert({ entryId: kingAfter, startedAt: now, endedAt: null })}`;
-              const king = (yield* sql<{ siteKey: string; score: number }>`
-                SELECT site_key, score FROM entries WHERE id = ${kingAfter}`)[0];
-              if (king) {
-                yield* insertEvent({
+            if (kingAfter) {
+              writes.push(sql`INSERT INTO reigns ${sql.insert({ entryId: kingAfter.id, startedAt: now, endedAt: null })}`);
+              const kingScore = kingAfter.id === entryId ? S : (topOther?.score ?? S);
+              writes.push(
+                insertEvent({
                   kind: "crowned",
-                  entryId: kingAfter,
-                  siteKey: king.siteKey,
-                  score: king.score,
+                  entryId: kingAfter.id,
+                  siteKey: kingAfter.siteKey,
+                  score: kingScore,
                   rank: 1,
-                  message: `👑 ${king.siteKey} is the new #1 with ${king.score}/1000`,
+                  message: `👑 ${kingAfter.siteKey} is the new #1 with ${kingScore}/1000`,
                   createdAt: now,
-                });
-              }
+                }),
+              );
             }
           }
+
+          yield* batch.run(writes);
 
           return {
             entryId,
             judgmentId,
             siteKey: input.siteKey,
             roll,
-            score: verdict.score,
+            score: S,
             previousScore,
             rank,
             previousRank,
             crowned,
-            hidden: false,
+            hidden,
           } satisfies PlacementResult;
         },
-        sql.withTransaction,
         Effect.orDie,
       );
 
@@ -729,7 +741,7 @@ export class Board extends Context.Service<
       }, Effect.orDie);
 
       const duelsForJudgment = Effect.fn("Board.duelsForJudgment")(function* (judgmentId: string) {
-        const rows = yield* sql<DuelRow>`${duelSelect} WHERE d.judgment_id = ${judgmentId} ORDER BY d.rowid ASC`;
+        const rows = yield* sql<DuelRow>`${duelSelect} WHERE d.judgment_id = ${judgmentId} ORDER BY d.seq ASC`;
         return rows.map(toDuel);
       }, Effect.orDie);
 

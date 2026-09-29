@@ -1,0 +1,67 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "jevboard",
+  "main": "./workers/app.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "upload_source_maps": true,
+
+  // SQLite at the edge. Create with `wrangler d1 create jevboard` and paste the id.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "jevboard",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // Paid judgments run as queue jobs:
+  //  - jevboard-judgments: crawl + Claude verdict, many in parallel
+  //  - jevboard-placements: tiebreak duels + ranking, strictly one at a time so
+  //    concurrent verdicts never interleave inside a tie group
+  "queues": {
+    "producers": [
+      { "binding": "JUDGMENT_QUEUE", "queue": "jevboard-judgments" },
+      { "binding": "PLACEMENT_QUEUE", "queue": "jevboard-placements" }
+    ],
+    "consumers": [
+      {
+        "queue": "jevboard-judgments",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_concurrency": 10,
+        "max_retries": 3
+      },
+      {
+        "queue": "jevboard-placements",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_concurrency": 1,
+        "max_retries": 10
+      }
+    ]
+  },
+
+  // Every minute: confirm payments for buyers who closed the tab, re-queue
+  // stuck judgments, prune presence heartbeats.
+  "triggers": { "crons": ["* * * * *"] },
+
+  // Submission rate limits (each submission triggers an outbound reachability check).
+  "ratelimits": [
+    { "name": "VISITOR_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
+    { "name": "IP_LIMITER", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } }
+  ],
+
+  // Non-secret config. Secrets: `wrangler secret put ANTHROPIC_API_KEY` /
+  // AUTUMN_SECRET_KEY / AUTUMN_WEBHOOK_SECRET (use .dev.vars locally).
+  "vars": {
+    "JEV_MODEL": "claude-opus-5-5",
+    "JEV_JUDGE_EFFORT": "medium",
+    "JEV_DUEL_EFFORT": "low",
+    "AUTUMN_PLAN_ID": "judgment",
+    "AUTUMN_FEATURE_ID": "judgment",
+    "AUTUMN_API_VERSION": "2.4.0"
+  }
+}

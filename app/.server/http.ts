@@ -33,7 +33,7 @@ export interface CurrentRequestShape {
   readonly origin: string;
   /** Anonymous visitor id (`jev_vid` cookie). */
   readonly visitorId: string;
-  /** Best-effort client IP (first X-Forwarded-For hop), for rate limiting only. */
+  /** Client IP (CF-Connecting-IP on Cloudflare), for rate limiting only. */
   readonly clientIp: string;
 }
 
@@ -59,8 +59,11 @@ const provideRequest = <A, E>(effect: Effect.Effect<A, E, RouteServices>, args: 
     const config = yield* AppConfig;
     const visitor = args.context.get(visitorContext);
     const visitorId = visitor?.id ?? "anonymous";
-    if (visitor?.isNew) yield* (yield* Board).recordVisitor(visitor.id);
-    yield* (yield* Presence).heartbeat(visitorId);
+    // Machine endpoints (webhooks, badges, images) don't count as visitors.
+    const pathname = new URL(args.request.url).pathname;
+    const human = !/^\/(api\/autumn|badge|og|healthz)/.test(pathname);
+    if (human && visitor?.isNew) yield* (yield* Board).recordVisitor(visitor.id);
+    if (human) yield* (yield* Presence).heartbeat(visitorId);
     return yield* effect.pipe(
       Effect.provideService(
         CurrentRequest,
@@ -70,9 +73,8 @@ const provideRequest = <A, E>(effect: Effect.Effect<A, E, RouteServices>, args: 
           origin: originFor(args.request, config.publicUrl),
           visitorId,
           clientIp:
-            args.request.headers.get("fly-client-ip") ??
+            args.request.headers.get("cf-connecting-ip") ??
             args.request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-            args.request.headers.get("x-real-ip") ??
             "unknown",
         }),
       ),

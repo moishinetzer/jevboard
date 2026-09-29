@@ -45,8 +45,7 @@ export const submitSite = Effect.fn("submitSite")(function* (rawUrl: string) {
   const request = yield* CurrentRequest;
   const limiter = yield* RateLimiter;
   const allowed =
-    (yield* limiter.hit(`submit:visitor:${request.visitorId}`, 12, 10 * 60_000)) &&
-    (yield* limiter.hit(`submit:ip:${request.clientIp}`, 30, 10 * 60_000));
+    (yield* limiter.allow("visitor", request.visitorId)) && (yield* limiter.allow("ip", request.clientIp));
   if (!allowed) {
     return {
       ok: false,

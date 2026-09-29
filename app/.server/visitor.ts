@@ -28,7 +28,14 @@ const readCookie = (header: string | null, name: string): string | null => {
   return null;
 };
 
+/** Machine endpoints never get a visitor cookie. */
+const MACHINE_PATHS = /^\/(api\/autumn|badge|og|healthz)/;
+
 export const visitorMiddleware: MiddlewareFunction<Response> = async ({ request, context }, next) => {
+  if (MACHINE_PATHS.test(new URL(request.url).pathname)) {
+    context.set(visitorContext, { id: "machine", isNew: false });
+    return next();
+  }
   const existing = readCookie(request.headers.get("Cookie"), COOKIE);
   const visitor: Visitor =
     existing && VALID_ID.test(existing) ? { id: existing, isNew: false } : { id: makeCustomerId(), isNew: true };

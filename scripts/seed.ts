@@ -1,15 +1,19 @@
 /**
- * Dev-only: fills the database with a realistic-looking board using mock Jev
- * verdicts (no crawling, no API calls, no payments).
+ * Dev-only: builds a realistic-looking board from mock Jev verdicts (no
+ * crawling, no API calls, no payments) and loads it into the LOCAL D1
+ * database used by `pnpm dev`:
  *
- *   DATABASE_PATH=./data/dev.db pnpm seed
+ *   pnpm db:migrate && pnpm seed
  *
- * Refuses to run when NODE_ENV=production.
+ * The board is generated in a scratch SQLite file with the same migrations,
+ * dumped to data/seed.sql, then applied with `wrangler d1 execute --local`.
  */
 import { Effect, Layer, ManagedRuntime, Random } from "effect";
 import { SqlClient } from "effect/sql";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { AppConfig } from "../app/.server/config";
-import { DatabaseLive } from "../app/.server/db/Database";
+import { SqliteLocal } from "../test/support/sqlite";
 import { CustomerId } from "../app/.server/domain/ids";
 import type { SiteSnapshot } from "../app/.server/domain/models";
 import { Board, type DuelRecord } from "../app/.server/services/Board";
@@ -74,17 +78,9 @@ const snapshotFor = (siteKey: string, title: string, description: string): SiteS
 });
 
 const program = Effect.gen(function* () {
-  const config = yield* AppConfig;
-  if (config.env === "production") return yield* Effect.die(new Error("Refusing to seed a production database."));
   const board = yield* Board;
   const orders = yield* Orders;
   const sql = yield* SqlClient.SqlClient;
-
-  const existing = yield* board.stats;
-  if (existing.entries > 0) {
-    yield* Effect.logInfo(`Database already has ${existing.entries} entries — skipping seed.`);
-    return;
-  }
 
   let judged = 0;
   for (const [siteKey, title, description] of SITES) {
@@ -129,7 +125,7 @@ const program = Effect.gen(function* () {
         url: `https://${siteKey}/`,
         host: siteKey.split("/")[0]!,
         verdict,
-        snapshot,
+        ogImage: snapshot.ogImage,
         model: "mock-jev",
         pagesCrawled: [`https://${siteKey}/`],
         tieOrder,
@@ -152,18 +148,50 @@ const program = Effect.gen(function* () {
   yield* sql`UPDATE entries SET clicks = abs(random()) % 2500`;
   yield* sql`UPDATE reigns SET started_at = started_at - 2 * 86400000 WHERE ended_at IS NULL`;
 
-  yield* Effect.logInfo(`Seeded ${entries.length} entries from ${judged} mock judgments.`);
+  yield* Effect.logInfo(`Generated ${entries.length} entries from ${judged} mock judgments.`);
+
+  // Dump every table as INSERT statements for `wrangler d1 execute`.
+  const tables = ["entries", "orders", "judgments", "duels", "events", "reigns"];
+  const lines: Array<string> = [];
+  for (const table of tables) {
+    const rows = yield* sql.unsafe<Record<string, unknown>>(`SELECT * FROM ${table}`).withoutTransform;
+    for (const row of rows) {
+      const columns = Object.keys(row);
+      const values = columns.map((column) => sqlLiteral(row[column]));
+      lines.push(`INSERT INTO ${table} (${columns.join(", ")}) VALUES (${values.join(", ")});`);
+    }
+  }
+  return lines;
 });
 
+const sqlLiteral = (value: unknown): string => {
+  if (value === null || value === undefined) return "NULL";
+  if (typeof value === "number" || typeof value === "bigint") return String(value);
+  return `'${String(value).replaceAll("'", "''")}'`;
+};
+
+const SCRATCH = "./data/seed-scratch.db";
+mkdirSync("./data", { recursive: true });
+rmSync(SCRATCH, { force: true });
+
 const SeedLayer = Layer.mergeAll(Board.layer, Orders.layer).pipe(
-  Layer.provideMerge(DatabaseLive),
-  Layer.provideMerge(AppConfig.layer),
+  Layer.provideMerge(SqliteLocal(SCRATCH)),
+  Layer.provideMerge(AppConfig.layerTest()),
 );
 
 const runtime = ManagedRuntime.make(SeedLayer);
 runtime
   .runPromise(program)
-  .then(() => runtime.dispose())
+  .then(async (lines) => {
+    await runtime.dispose();
+    rmSync(SCRATCH, { force: true });
+    const reset = ["DELETE FROM entries;", "DELETE FROM orders;", "DELETE FROM judgments;", "DELETE FROM duels;", "DELETE FROM events;", "DELETE FROM reigns;"];
+    writeFileSync("./data/seed.sql", [...reset, ...lines].join("\n") + "\n");
+    console.log(`Wrote data/seed.sql (${lines.length} rows). Loading into local D1…`);
+    if (!process.argv.includes("--no-apply")) {
+      execFileSync("npx", ["wrangler", "d1", "execute", "DB", "--local", "--file", "./data/seed.sql"], { stdio: "inherit" });
+    }
+  })
   .catch(async (error: unknown) => {
     console.error(error);
     await runtime.dispose();

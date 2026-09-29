@@ -1,101 +1,57 @@
-import { Context, Effect, Layer, Queue, Schedule } from "effect";
-import { AppConfig } from "../config";
+import { Context, Effect, FiberSet, Layer } from "effect";
 import type { PaymentError } from "../domain/errors";
 import type { OrderId } from "../domain/ids";
 import { Orders } from "./Orders";
 import { Payments } from "./Payments";
 import { Pipeline } from "./Pipeline";
 
-/** Unpaid orders older than this are no longer swept (checkout sessions expire after ~1h). */
-const SWEEP_WINDOW_MS = 26 * 60 * 60 * 1000;
-
 /**
- * In-process job queue for paid judgments.
+ * Where paid judgments go to be processed.
  *
- * A fixed pool of worker fibers (JEV_WORKERS) is forked into the layer's
- * scope, so they live exactly as long as the runtime. On boot, every order
- * left in flight by a previous process is re-enqueued — a paid judgment is
- * never lost to a deploy or crash.
- *
- * A payment sweeper also runs every minute: buyers who paid and closed the tab
- * before returning to /judging/:orderId still get judged.
+ * Production (Cloudflare) sends jobs to Queues — see cloudflare/layers.ts:
+ * judging jobs run in parallel, placement jobs one at a time. The in-process
+ * layer here runs the whole pipeline on a forked fiber (tests, scripts).
  */
-export class JudgmentQueue extends Context.Service<
-  JudgmentQueue,
-  {
-    /** Schedules an order for processing. No-op if it's already queued or running. */
-    readonly enqueue: (orderId: OrderId) => Effect.Effect<void>;
-    /** Number of orders waiting or running in this process. */
-    readonly pending: Effect.Effect<number>;
-    /**
-     * Confirms payment for an unpaid order and queues it if paid (used by the
-     * payment webhook and the sweeper). Idempotent.
-     */
-    readonly settle: (orderId: OrderId, customerId: string) => Effect.Effect<void, PaymentError>;
-  }
->()("jevboard/JudgmentQueue") {
-  static readonly layer = Layer.effect(
+export interface JudgmentQueueShape {
+  /** Schedules a paid order for judging. Safe to call more than once. */
+  readonly enqueue: (orderId: OrderId) => Effect.Effect<void>;
+  /**
+   * Confirms payment for an unpaid order and enqueues it if paid (used by the
+   * judging page, the payment webhook and the cron sweeper). Idempotent.
+   */
+  readonly settle: (orderId: OrderId, customerId: string) => Effect.Effect<void, PaymentError>;
+}
+
+export class JudgmentQueue extends Context.Service<JudgmentQueue, JudgmentQueueShape>()("jevboard/JudgmentQueue") {
+  /** Shared `settle` built on top of any `enqueue`. */
+  static readonly makeSettle = (enqueue: JudgmentQueueShape["enqueue"]) =>
+    Effect.gen(function* () {
+      const orders = yield* Orders;
+      const payments = yield* Payments;
+      return Effect.fn("JudgmentQueue.settle")(function* (orderId: OrderId, customerId: string) {
+        const paid = yield* payments.confirm({ orderId, customerId });
+        if (paid === "paid" && (yield* orders.markPaid(orderId))) yield* enqueue(orderId);
+      });
+    });
+
+  /** Runs judgments on fibers owned by this layer (interrupted when it closes). */
+  static readonly layerInProcess = Layer.effect(
     JudgmentQueue,
     Effect.gen(function* () {
-      const config = yield* AppConfig;
-      const orders = yield* Orders;
       const pipeline = yield* Pipeline;
-      const payments = yield* Payments;
-      const queue = yield* Queue.unbounded<OrderId>();
+      const fibers = yield* FiberSet.make();
       const active = new Set<string>();
-
-      const worker = (id: number) =>
-        Queue.take(queue).pipe(
-          Effect.flatMap((orderId) =>
-            pipeline.run(orderId).pipe(Effect.ensuring(Effect.sync(() => active.delete(orderId)))),
-          ),
-          Effect.forever,
-          Effect.annotateLogs({ worker: id }),
-        );
-
-      for (let id = 1; id <= config.workers; id++) {
-        yield* Effect.forkScoped(worker(id));
-      }
 
       const enqueue = Effect.fn("JudgmentQueue.enqueue")(function* (orderId: OrderId) {
         if (active.has(orderId)) return;
         active.add(orderId);
-        yield* Queue.offer(queue, orderId);
+        yield* FiberSet.run(
+          fibers,
+          pipeline.run(orderId).pipe(Effect.ensuring(Effect.sync(() => active.delete(orderId)))),
+        );
       });
 
-      /** Confirms payment for one unpaid order and queues it. Safe to call repeatedly. */
-      const settle = Effect.fn("JudgmentQueue.settle")(function* (orderId: OrderId, customerId: string) {
-        const paid = yield* payments.confirm({ orderId, customerId });
-        if (paid === "paid" && (yield* orders.markPaid(orderId))) yield* enqueue(orderId);
-      });
-
-      const sweep = Effect.gen(function* () {
-        const unpaid = yield* orders.awaitingPayment(Date.now() - SWEEP_WINDOW_MS);
-        for (const order of unpaid) {
-          yield* settle(order.id, order.customerId).pipe(
-            Effect.catchTag("PaymentError", (error) => Effect.logDebug("Sweeper: payment check failed", error)),
-          );
-        }
-      }).pipe(Effect.withSpan("JudgmentQueue.sweep"));
-
-      yield* sweep.pipe(
-        Effect.catchCause((cause) => Effect.logWarning("Payment sweep failed", cause)),
-        Effect.repeat(Schedule.spaced("1 minute")),
-        Effect.delay("30 seconds"),
-        Effect.forkScoped,
-      );
-
-      const recovered = yield* orders.inFlight;
-      for (const order of recovered) yield* enqueue(order.id);
-      if (recovered.length > 0) {
-        yield* Effect.logInfo(`Recovered ${recovered.length} in-flight judgment(s)`);
-      }
-
-      return JudgmentQueue.of({
-        enqueue,
-        settle,
-        pending: Effect.sync(() => active.size),
-      });
+      return JudgmentQueue.of({ enqueue, settle: yield* JudgmentQueue.makeSettle(enqueue) });
     }),
   );
 }
