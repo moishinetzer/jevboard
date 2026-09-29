@@ -1,0 +1,229 @@
+@import "@fontsource/anton/400.css";
+@import "@fontsource/space-grotesk/400.css";
+@import "@fontsource/space-grotesk/500.css";
+@import "@fontsource/space-grotesk/700.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/700.css";
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/*
+ * Jevboard design tokens.
+ * A loud, tabloid-billboard look: warm paper, heavy ink, highlighter yellow,
+ * hard offset shadows. Everything is driven by CSS variables so dark mode is
+ * just a token swap.
+ */
+:root {
+  --paper: #fbf6e7;
+  --paper-2: #f2ead3;
+  --ink: #111110;
+  --ink-soft: #4a463d;
+  --jev: #ffd400;
+  --jev-deep: #f2b800;
+  --hot: #ff3b1f;
+  --up: #00a95c;
+  --down: #e5261a;
+  --card: #fffdf6;
+  --line: #111110;
+  --shadow: #111110;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #12110e;
+    --paper-2: #1b1a15;
+    --ink: #f6f1e1;
+    --ink-soft: #b9b2a0;
+    --card: #1a1914;
+    --line: #f6f1e1;
+    --shadow: #000000;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper: #12110e;
+  --paper-2: #1b1a15;
+  --ink: #f6f1e1;
+  --ink-soft: #b9b2a0;
+  --card: #1a1914;
+  --line: #f6f1e1;
+  --shadow: #000000;
+  color-scheme: dark;
+}
+
+@theme {
+  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-display: "Anton", "Impact", "Haettenschweiler", "Arial Narrow Bold",
+    sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-jev: var(--jev);
+  --color-jev-deep: var(--jev-deep);
+  --color-hot: var(--hot);
+  --color-up: var(--up);
+  --color-down: var(--down);
+  --color-card: var(--card);
+  --color-line: var(--line);
+
+  --animate-marquee: marquee 45s linear infinite;
+  --animate-pop: pop 0.5s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+  --animate-wiggle: wiggle 2.4s ease-in-out infinite;
+  --animate-blink: blink 1.1s steps(2, start) infinite;
+
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+  @keyframes pop {
+    from {
+      transform: scale(0.6);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+  @keyframes wiggle {
+    0%,
+    100% {
+      transform: rotate(-3deg);
+    }
+    50% {
+      transform: rotate(3deg);
+    }
+  }
+  @keyframes blink {
+    to {
+      visibility: hidden;
+    }
+  }
+}
+
+html,
+body {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--jev);
+  color: #111110;
+}
+
+@layer components {
+  /* A chunky bordered card with a hard offset shadow. */
+  .slab {
+    background: var(--card);
+    border: 3px solid var(--line);
+    box-shadow: 6px 6px 0 var(--shadow);
+  }
+  .slab-sm {
+    background: var(--card);
+    border: 2px solid var(--line);
+    box-shadow: 3px 3px 0 var(--shadow);
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border: 3px solid #111110;
+    background: var(--jev);
+    color: #111110;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    box-shadow: 4px 4px 0 #111110;
+    transition:
+      transform 0.08s ease,
+      box-shadow 0.08s ease;
+  }
+  .btn:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 5px 5px 0 #111110;
+  }
+  .btn:active {
+    transform: translate(3px, 3px);
+    box-shadow: 1px 1px 0 #111110;
+  }
+  .btn:disabled {
+    opacity: 0.6;
+    cursor: progress;
+  }
+  .btn-ghost {
+    background: var(--card);
+    color: var(--ink);
+    border-color: var(--line);
+    box-shadow: 4px 4px 0 var(--shadow);
+  }
+  .btn-hot {
+    background: var(--hot);
+    color: #fff;
+  }
+  .sticker {
+    display: inline-block;
+    border: 2px solid #111110;
+    background: var(--jev);
+    color: #111110;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    padding: 0.15rem 0.45rem;
+  }
+  .score-num {
+    font-family: var(--font-display);
+    font-variant-numeric: tabular-nums;
+    line-height: 0.85;
+  }
+  .tabular {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .highlight {
+    background: linear-gradient(
+      transparent 55%,
+      var(--jev) 55%,
+      var(--jev) 92%,
+      transparent 92%
+    );
+  }
+  .dark .highlight,
+  [data-theme="dark"] .highlight {
+    color: var(--ink);
+  }
+  .halftone {
+    background-image: radial-gradient(var(--ink) 1px, transparent 1.2px);
+    background-size: 10px 10px;
+    opacity: 0.08;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

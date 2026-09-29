@@ -1,0 +1,13 @@
+.DS_Store
+.env
+/node_modules/
+
+# React Router
+/.react-router/
+/build/
+
+# Local database
+/data/
+*.db
+*.db-shm
+*.db-wal
