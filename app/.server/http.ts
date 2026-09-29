@@ -61,7 +61,7 @@ const provideRequest = <A, E>(effect: Effect.Effect<A, E, RouteServices>, args: 
     const visitorId = visitor?.id ?? "anonymous";
     // Machine endpoints (webhooks, badges, images) don't count as visitors.
     const pathname = new URL(args.request.url).pathname;
-    const human = !/^\/(api\/autumn|badge|og|healthz)/.test(pathname);
+    const human = !/^\/(api\/autumn|badge|og|healthz|sitemap)/.test(pathname);
     if (human && visitor?.isNew) yield* (yield* Board).recordVisitor(visitor.id);
     if (human) yield* (yield* Presence).heartbeat(visitorId);
     return yield* effect.pipe(

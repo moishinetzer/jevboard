@@ -23,4 +23,5 @@ export default [
   route("og/*", "routes/og.ts"),
   route("badge/*", "routes/badge.ts"),
   route("healthz", "routes/healthz.ts"),
+  route("sitemap.xml", "routes/sitemap.ts"),
 ] satisfies RouteConfig;

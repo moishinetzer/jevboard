@@ -29,7 +29,7 @@ const readCookie = (header: string | null, name: string): string | null => {
 };
 
 /** Machine endpoints never get a visitor cookie. */
-const MACHINE_PATHS = /^\/(api\/autumn|badge|og|healthz)/;
+const MACHINE_PATHS = /^\/(api\/autumn|badge|og|healthz|sitemap)/;
 
 export const visitorMiddleware: MiddlewareFunction<Response> = async ({ request, context }, next) => {
   if (MACHINE_PATHS.test(new URL(request.url).pathname)) {

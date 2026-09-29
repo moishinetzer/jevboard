@@ -3,3 +3,6 @@ Allow: /
 Disallow: /dev/
 Disallow: /judging/
 Disallow: /go/
+Disallow: /api/
+
+Sitemap: /sitemap.xml
