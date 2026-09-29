@@ -1,9 +1,15 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { faviconUrl, formatDelta, tierFor } from "~/lib/format";
 
 /** Site favicon with a lettered fallback. */
 export function Favicon({ host, size = 32, className }: { host: string; size?: number; className?: string }) {
   const [failed, setFailed] = useState(false);
+  const ref = useRef<HTMLImageElement>(null);
+  // An image that failed before hydration never fires onError on the client.
+  useEffect(() => {
+    const img = ref.current;
+    if (img && img.complete && img.naturalWidth === 0) setFailed(true);
+  }, []);
   if (failed) {
     return (
       <span
@@ -17,6 +23,7 @@ export function Favicon({ host, size = 32, className }: { host: string; size?: n
   }
   return (
     <img
+      ref={ref}
       src={faviconUrl(host, 64)}
       alt=""
       width={size}
