@@ -9,11 +9,12 @@ import { Crawler } from "../services/Crawler";
 import { JudgmentQueue } from "../services/JudgmentQueue";
 import { Orders } from "../services/Orders";
 import { Payments } from "../services/Payments";
+import { RateLimiter } from "../services/RateLimiter";
 
 /** What the submit form renders when a submission can't proceed. */
 export interface SubmitFailure {
   readonly ok: false;
-  readonly field: "url" | "payment";
+  readonly field: "url" | "payment" | "rate";
   readonly message: string;
   readonly value: string;
 }
@@ -42,6 +43,18 @@ const preflightMessage = (error: CrawlError): string => {
  */
 export const submitSite = Effect.fn("submitSite")(function* (rawUrl: string) {
   const request = yield* CurrentRequest;
+  const limiter = yield* RateLimiter;
+  const allowed =
+    (yield* limiter.hit(`submit:visitor:${request.visitorId}`, 12, 10 * 60_000)) &&
+    (yield* limiter.hit(`submit:ip:${request.clientIp}`, 30, 10 * 60_000));
+  if (!allowed) {
+    return {
+      ok: false,
+      field: "rate",
+      message: "Easy there. Jev needs a minute before checking more sites for you.",
+      value: rawUrl,
+    } satisfies SubmitFailure;
+  }
   const normalized = normalizeSite(rawUrl);
   if (!normalized.ok) {
     return { ok: false, field: "url", message: normalizeErrorMessage[normalized.error], value: rawUrl } satisfies SubmitFailure;

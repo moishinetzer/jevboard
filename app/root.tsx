@@ -1,4 +1,14 @@
-import { isRouteErrorResponse, Link, Links, Meta, Outlet, Scripts, ScrollRestoration, useRouteLoaderData } from "react-router";
+import {
+  isRouteErrorResponse,
+  Link,
+  Links,
+  Meta,
+  Outlet,
+  Scripts,
+  ScrollRestoration,
+  type ShouldRevalidateFunction,
+  useRouteLoaderData,
+} from "react-router";
 import type { Route } from "./+types/root";
 import { effectLoader } from "./.server/http";
 import { loadShell } from "./.server/flows/shell";
@@ -12,6 +22,13 @@ import "./app.css";
 export const middleware: Route.MiddlewareFunction[] = [visitorMiddleware];
 
 export const loader = effectLoader("root", () => loadShell);
+
+/**
+ * The shell's live data refreshes itself through /api/feed, so the root loader
+ * only re-runs after form submissions — not on every navigation or poll.
+ */
+export const shouldRevalidate: ShouldRevalidateFunction = ({ formMethod, defaultShouldRevalidate }) =>
+  formMethod !== undefined && formMethod.toUpperCase() !== "GET" ? defaultShouldRevalidate : false;
 
 export const links: Route.LinksFunction = () => [
   { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },

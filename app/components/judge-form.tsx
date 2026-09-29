@@ -3,7 +3,7 @@ import { useFetcher } from "react-router";
 
 interface SubmitFailure {
   readonly ok: false;
-  readonly field: "url" | "payment";
+  readonly field: "url" | "payment" | "rate";
   readonly message: string;
   readonly value: string;
 }

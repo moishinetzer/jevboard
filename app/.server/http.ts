@@ -30,8 +30,10 @@ export interface CurrentRequestShape {
   readonly url: URL;
   /** Public origin (PUBLIC_URL, or derived from the request / proxy headers). */
   readonly origin: string;
-  /** Anonymous visitor id (`jev_vid` cookie); also the Autumn customer id. */
+  /** Anonymous visitor id (`jev_vid` cookie). */
   readonly visitorId: string;
+  /** Best-effort client IP (first X-Forwarded-For hop), for rate limiting only. */
+  readonly clientIp: string;
 }
 
 export class CurrentRequest extends Context.Service<CurrentRequest, CurrentRequestShape>()("jevboard/CurrentRequest") {}
@@ -50,6 +52,7 @@ const STATUS_BY_TAG: Record<string, number> = {
   NotFound: 404,
   CrawlError: 422,
   PaymentError: 502,
+  RateLimited: 429,
   JudgeError: 502,
 };
 
@@ -81,6 +84,11 @@ const provideRequest = <A, E>(effect: Effect.Effect<A, E, RouteServices>, args: 
           url: new URL(args.request.url),
           origin: originFor(args.request, config.publicUrl),
           visitorId,
+          clientIp:
+            args.request.headers.get("fly-client-ip") ??
+            args.request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+            args.request.headers.get("x-real-ip") ??
+            "unknown",
         }),
       ),
     );

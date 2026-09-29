@@ -9,6 +9,7 @@ import { Orders } from "./services/Orders";
 import { PaymentsLive } from "./services/payments/PaymentsLive";
 import { Pipeline } from "./services/Pipeline";
 import { Presence } from "./services/Presence";
+import { RateLimiter } from "./services/RateLimiter";
 
 /**
  * The whole backend as one layer graph:
@@ -37,7 +38,7 @@ const LoggerLive = Layer.unwrap(
   }),
 );
 
-export const AppLayer = Layer.mergeAll(Workers, Repositories, Providers, Presence.layer).pipe(
+export const AppLayer = Layer.mergeAll(Workers, Repositories, Providers, Presence.layer, RateLimiter.layer).pipe(
   Layer.provideMerge(LoggerLive),
   Layer.provideMerge(AppConfig.layer),
 );
