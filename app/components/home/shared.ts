@@ -56,8 +56,13 @@ export const homeHref = (filters: BoardFilters, patch: Partial<BoardFilters> = {
   return `/${search ? `?${search}` : ""}${hash}`;
 };
 
-/** Keyboard focus ring shared by the home page's links and buttons. */
-export const focusRing = "outline-none focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-hot";
+/**
+ * Keyboard focus ring shared by the home page's links and buttons. Sets the
+ * outline style explicitly: Tailwind v4's width utilities read it from a
+ * variable that `outline-none` would blank out.
+ */
+export const focusRing =
+  "focus-visible:outline-solid focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-hot";
 
 /**
  * Pins the light-theme tokens on a surface that is always yellow (Jev's

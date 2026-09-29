@@ -62,7 +62,7 @@ export function BoardRow({
         <div className="min-w-0">
           <Link
             to={entryPath(entry.siteKey)}
-            className={`block truncate text-base leading-tight font-bold after:absolute after:inset-0 after:content-[''] hover:underline sm:text-lg ${focusRing} focus-visible:outline-none focus-visible:after:outline-3 focus-visible:after:-outline-offset-4 focus-visible:after:outline-hot`}
+            className={`block truncate text-base leading-tight font-bold after:absolute after:inset-0 after:content-[''] hover:underline sm:text-lg focus-visible:outline-none focus-visible:after:outline-3 focus-visible:after:-outline-offset-4 focus-visible:after:outline-hot`}
           >
             {entry.name}
           </Link>

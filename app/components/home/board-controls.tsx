@@ -49,7 +49,7 @@ function SortTabs({ filters }: { filters: BoardFilters }) {
 
 function SearchBox({ filters }: { filters: BoardFilters }) {
   return (
-    <Form method="get" action="/" role="search" preventScrollReset className="flex w-full min-w-0 lg:w-[22rem]">
+    <Form method="get" action="/#board" role="search" preventScrollReset className="flex w-full min-w-0 lg:w-[22rem]">
       {filters.sort !== "rank" ? <input type="hidden" name="sort" value={filters.sort} /> : null}
       {filters.category ? <input type="hidden" name="category" value={filters.category} /> : null}
       <label htmlFor="board-search" className="sr-only">

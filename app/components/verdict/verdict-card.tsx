@@ -2,7 +2,9 @@ import type { BoardEntry, Judgment } from "~/.server/domain/models";
 import { JevFace } from "~/components/logo";
 import { Delta, Favicon, TierBadge, VerdictLabel } from "~/components/ui";
 import { formatCount, SCORE_TIERS, timeAgo } from "~/lib/format";
+import { CopyButton } from "./copy-button";
 import { goPath, serialLabel } from "./links";
+import { linkedInShareUrl, shareMessage, type ShareFacts, xIntentUrl } from "./share-copy";
 
 /** "Better than 83% of defendants", with the edge cases handled. */
 export const percentileLine = (rank: number, total: number, percentile: number): string => {
@@ -62,12 +64,14 @@ export function VerdictHero({
   totalEntries,
   percentile,
   now,
+  share,
 }: {
   entry: BoardEntry;
   judgment: Judgment | undefined;
   totalEntries: number;
   percentile: number;
   now: number;
+  share: ShareFacts;
 }) {
   const reigning = entry.rank === 1;
   const founding = entry.entryNumber <= 100;
@@ -161,6 +165,7 @@ export function VerdictHero({
           <div className="flex flex-wrap items-center gap-2">
             <TierBadge score={entry.score} className="bg-[#fffdf6]!" />
           </div>
+          <QuickShare facts={share} />
         </aside>
 
         {/* The ruling */}
@@ -186,5 +191,25 @@ export function VerdictHero({
         </div>
       </div>
     </article>
+  );
+}
+
+/** Third-person share buttons that read right whether you're the defendant or a bystander. */
+function QuickShare({ facts }: { facts: ShareFacts }) {
+  const message = shareMessage(facts, "spectator");
+  const button = "btn bg-[#fffdf6]! px-3 py-2 text-xs";
+  return (
+    <div className="mt-auto border-t-[3px] border-[#111110] pt-4">
+      <p className="font-mono text-[11px] font-bold tracking-widest uppercase">Pass it on</p>
+      <div className="mt-2.5 flex flex-wrap gap-2">
+        <a href={xIntentUrl(message.full)} target="_blank" rel="noopener noreferrer" className={button}>
+          Post on 𝕏
+        </a>
+        <a href={linkedInShareUrl(facts.url)} target="_blank" rel="noopener noreferrer" className={button}>
+          LinkedIn
+        </a>
+        <CopyButton text={facts.url} label="Copy link" className={button} />
+      </div>
+    </div>
   );
 }

@@ -78,8 +78,11 @@
 }
 @keyframes jev-burst {
   0% {
-    opacity: 1;
+    opacity: 0;
     transform: translate(-50%, -50%) rotate(0deg) scale(0.3);
+  }
+  6% {
+    opacity: 1;
   }
   55% {
     opacity: 1;
@@ -109,6 +112,22 @@
 }
 .jev-from-right {
   animation: jev-from-right 0.5s cubic-bezier(0.2, 1.3, 0.4, 1) both;
+}
+
+/* The active step on the progress rail. */
+@keyframes jev-throb {
+  0%,
+  100% {
+    opacity: 0.15;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.06);
+  }
+}
+.jev-throb {
+  animation: jev-throb 1.4s ease-in-out infinite;
 }
 
 /* The judging stage's sweeping spotlight. */

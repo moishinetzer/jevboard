@@ -88,7 +88,7 @@ export function ProgressRail({ steps }: { steps: ReadonlyArray<Step> }) {
           ) : null}
           <span className="relative z-10">
             {step.state === "active" ? (
-              <span aria-hidden className="absolute -inset-1.5 animate-ping border-[3px] border-hot opacity-60" />
+              <span aria-hidden className="jev-throb absolute -inset-2 border-[3px] border-hot" />
             ) : null}
             <span
               className={`relative grid size-11 place-items-center border-[3px] border-line font-display text-xl sm:size-14 sm:text-2xl ${STEP_STYLE[step.state]}`}
@@ -109,7 +109,7 @@ export function ProgressRail({ steps }: { steps: ReadonlyArray<Step> }) {
 // ---------------------------------------------------------------------------
 
 const QUIPS: Partial<Record<OrderStatus, ReadonlyArray<string>>> = {
-  paid: ["Jev is putting on the robe…", "Clearing the docket…", "Cracking knuckles. Loudly."],
+  paid: ["Clearing the docket…", "Cracking knuckles. Loudly.", "Finding the reading glasses…"],
   crawling: [
     "Jev is reading your homepage…",
     "…and your pricing page. Hm.",
@@ -313,7 +313,7 @@ export function AwaitingPayment({ orderId, simulated }: { orderId: string; simul
   return (
     <section aria-labelledby="payment-title" className="slab p-5 sm:p-8">
       <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-        <JevFace size={84} className="shrink-0 animate-wiggle" />
+        <JevFace size={84} className="size-16 shrink-0 animate-wiggle sm:size-21" />
         <div className="min-w-0">
           <h2 id="payment-title" className="font-display text-4xl leading-none uppercase sm:text-6xl">
             Waiting for your $5…
@@ -362,7 +362,7 @@ export function Mistrial({ order }: { order: OrderView }) {
   return (
     <section aria-labelledby="mistrial-title" className="slab p-5 sm:p-8">
       <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-        <JevFace size={84} className="shrink-0 -rotate-12 grayscale" />
+        <JevFace size={84} className="size-16 shrink-0 -rotate-12 grayscale sm:size-21" />
         <div className="min-w-0">
           <span className="sticker bg-hot! text-sm">Mistrial</span>
           <h2 id="mistrial-title" className="mt-3 font-display text-4xl leading-none uppercase sm:text-6xl">

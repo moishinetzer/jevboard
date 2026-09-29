@@ -1,4 +1,4 @@
-import { useId, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { formatCount, formatMoney } from "~/lib/format";
 
 export interface DailyPoint {
@@ -13,14 +13,30 @@ export interface DailyPoint {
 const FIRST_COLOR = "#2563eb";
 const RETRIAL_COLOR = "#ff3b1f";
 
-const W = 720;
+/** Width used for server rendering, before the real width is measured. */
+const DEFAULT_W = 720;
 const PAD_L = 48;
 const PAD_R = 14;
 const PAD_T = 14;
 const AXIS_H = 24;
 const BARS_PLOT_H = 170;
 const LINE_PLOT_H = 120;
-const PLOT_W = W - PAD_L - PAD_R;
+
+/** Tracks an element's content width so SVG text renders at its real size (no viewBox scaling). */
+const useWidth = (fallback: number) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(fallback);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setWidth(Math.max(280, Math.round(entry.contentRect.width)));
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, width] as const;
+};
 
 const DAY_LABEL = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 const DAY_LONG = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
@@ -43,9 +59,11 @@ const niceMax = (value: number): number => {
 export function DailyCharts({ days, revenueBeforeCents }: { days: ReadonlyArray<DailyPoint>; revenueBeforeCents: number }) {
   const [active, setActive] = useState<number | null>(null);
   const titleId = useId();
+  const [measureRef, W] = useWidth(DEFAULT_W);
   const n = days.length;
   if (n === 0) return null;
 
+  const PLOT_W = W - PAD_L - PAD_R;
   const slot = PLOT_W / n;
   const barW = Math.min(18, slot * 0.7);
   const cx = (index: number) => PAD_L + slot * index + slot / 2;
@@ -61,7 +79,9 @@ export function DailyCharts({ days, revenueBeforeCents }: { days: ReadonlyArray<
   const areaPath = `M${cx(0)},${lineY(0)} L${linePoints.join(" L")} L${cx(n - 1)},${lineY(0)} Z`;
   const last = running[n - 1] ?? 0;
 
-  const tickDays = days.map((_, index) => index).filter((index) => (n - 1 - index) % 7 === 0);
+  // Weekly ticks, thinned out when the chart is narrow.
+  const tickEvery = W < 480 ? 14 : 7;
+  const tickDays = days.map((_, index) => index).filter((index) => (n - 1 - index) % tickEvery === 0);
   const totals = days.reduce(
     (acc, d) => ({ judgments: acc.judgments + d.judgments, rerolls: acc.rerolls + d.rerolls, revenue: acc.revenue + d.revenueCents }),
     { judgments: 0, rerolls: 0, revenue: 0 },
@@ -139,6 +159,7 @@ export function DailyCharts({ days, revenueBeforeCents }: { days: ReadonlyArray<
         onFocus={() => setActive((current) => current ?? n - 1)}
         onBlur={() => setActive(null)}
         onMouseLeave={() => setActive(null)}
+        ref={measureRef}
         className="relative outline-none focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-hot"
       >
         <p id={titleId} className="sr-only">

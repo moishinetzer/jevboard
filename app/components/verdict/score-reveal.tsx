@@ -44,7 +44,7 @@ export function CountUp({ value, className }: { value: number; className?: strin
 const CONFETTI_COLORS = ["var(--jev)", "var(--hot)", "#7cf0c5", "#9ec5ff", "#d6c8ff", "#fffdf6", "#ff9f1c"];
 
 /** A deterministic burst of paper confetti, fired when the count lands. */
-export function Confetti({ pieces = 44, origin = { x: "50%", y: "40%" } }: { pieces?: number; origin?: { x: string; y: string } }) {
+export function Confetti({ pieces = 64, origin = { x: "50%", y: "40%" } }: { pieces?: number; origin?: { x: string; y: string } }) {
   return (
     <div aria-hidden className="jev-confetti" style={{ "--ox": origin.x, "--oy": origin.y } as CSSProperties}>
       {Array.from({ length: pieces }, (_, index) => {
@@ -233,7 +233,9 @@ export function VerdictReveal({ order, result, origin }: { order: OrderView; res
       ) : null}
 
       <Section id="share" kicker={high ? "Brag responsibly" : "Confess publicly"} title="Tell everyone">
-        <SharePanel facts={facts} name={entry.name} serial={serial} />
+        <div className="max-w-2xl">
+          <SharePanel facts={facts} name={entry.name} serial={serial} />
+        </div>
       </Section>
     </div>
   );

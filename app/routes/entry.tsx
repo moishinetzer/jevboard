@@ -114,7 +114,14 @@ export default function Entry({ loaderData }: Route.ComponentProps) {
         </ol>
       </nav>
 
-      <VerdictHero entry={entry} judgment={latest} totalEntries={totalEntries} percentile={percentile} now={now} />
+      <VerdictHero
+        entry={entry}
+        judgment={latest}
+        totalEntries={totalEntries}
+        percentile={percentile}
+        now={now}
+        share={facts}
+      />
 
       <div className="mt-16 grid gap-16 sm:mt-20 sm:gap-20">
         {latest ? (

@@ -8,31 +8,42 @@ import { entryPath } from "~/lib/site-key";
 export const focusRing = "outline-none focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-hot";
 
 /**
- * Pins light-theme tokens on an always-yellow surface so borders and muted
- * text stay dark-on-yellow in dark mode too.
+ * Sets design tokens on a subtree. Tailwind's `--color-*` aliases resolve
+ * `var(--ink)` etc. at :root, so both layers are pinned.
+ */
+const pinTokens = (tokens: Record<string, string>): CSSProperties => {
+  const style: Record<string, string> = {};
+  for (const [name, value] of Object.entries(tokens)) {
+    style[`--${name}`] = value;
+    style[`--color-${name}`] = value;
+  }
+  return style as CSSProperties;
+};
+
+/**
+ * Light-theme tokens for an always-yellow surface, so borders and muted text
+ * stay dark-on-yellow in dark mode too.
  */
 export const ON_JEV: CSSProperties = {
-  ["--ink" as string]: "#111110",
-  ["--ink-soft" as string]: "#4a463d",
-  ["--line" as string]: "#111110",
-  ["--card" as string]: "#fffdf6",
-  ["--paper" as string]: "#fbf6e7",
+  ...pinTokens({ ink: "#111110", "ink-soft": "#4a463d", line: "#111110", card: "#fffdf6", paper: "#fbf6e7" }),
   background: "var(--jev)",
   color: "#111110",
 };
 
 /**
- * Pins dark-theme tokens on an always-dark surface (TV mode, ink bands), so
- * `text-ink`, `border-line`, `.slab` etc. read correctly on black in light mode too.
+ * Dark-theme tokens for an always-dark surface (TV mode), so `text-ink`,
+ * `bg-card`, `border-line`, `.slab` etc. read correctly on black in light mode too.
  */
 export const ON_INK: CSSProperties = {
-  ["--paper" as string]: "#12110e",
-  ["--paper-2" as string]: "#1b1a15",
-  ["--ink" as string]: "#f6f1e1",
-  ["--ink-soft" as string]: "#b9b2a0",
-  ["--card" as string]: "#1a1914",
-  ["--line" as string]: "#f6f1e1",
-  ["--shadow" as string]: "#000000",
+  ...pinTokens({
+    paper: "#12110e",
+    "paper-2": "#1b1a15",
+    ink: "#f6f1e1",
+    "ink-soft": "#b9b2a0",
+    card: "#1a1914",
+    line: "#f6f1e1",
+    shadow: "#000000",
+  }),
   background: "#111110",
   color: "#f6f1e1",
   colorScheme: "dark",

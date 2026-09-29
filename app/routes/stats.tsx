@@ -71,11 +71,11 @@ export default function Stats({ loaderData }: Route.ComponentProps) {
       <div className="mx-auto flex max-w-7xl flex-col gap-14 px-4 pt-10">
         <section aria-labelledby="revenue-title" className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h2 id="revenue-title" className="font-display uppercase leading-[0.85]">
-              <span className="block text-7xl sm:text-9xl">
-                <span className="bg-jev px-2 text-[#111110]">{formatMoney(revenueCents)}</span>
+            <h2 id="revenue-title" className="font-display uppercase">
+              <span className="inline-block -rotate-1 border-[3px] border-[#111110] bg-jev px-3 pt-2 pb-1 text-7xl leading-none text-[#111110] shadow-[6px_6px_0_var(--shadow)] sm:text-9xl">
+                {formatMoney(revenueCents)}
               </span>
-              <span className="mt-2 block text-4xl sm:text-5xl">fed to Jev</span>
+              <span className="mt-4 block text-4xl leading-none sm:text-5xl">fed to Jev</span>
             </h2>
             <p className="mt-4 max-w-xl text-lg text-ink-soft">
               Across <strong className="text-ink">{formatCount(judgments)}</strong> judgments of{" "}
@@ -128,7 +128,7 @@ export default function Stats({ loaderData }: Route.ComponentProps) {
           <DailyCharts days={daily} revenueBeforeCents={Math.max(0, stats.revenueCents - windowRevenue)} />
         </section>
 
-        <div className="grid gap-10 lg:grid-cols-2">
+        <div className="grid gap-10 lg:grid-cols-2 lg:items-start">
           <section aria-labelledby="scores-title" className="slab p-4 sm:p-6">
             <h2 id="scores-title" className="font-display text-4xl uppercase leading-none">
               Score distribution

@@ -12,7 +12,7 @@ const PLACES = [
   { medal: "🥉", place: "3rd", step: "md:h-12", order: "md:order-3" },
 ] as const;
 
-/** The stage is near-black in both themes (`--shadow` is #111110 / #000). */
+/** Stage text colour. The stage itself is `var(--shadow)`: near-black in both themes (#111110 / #000). */
 const CREAM = "#fbf6e7";
 
 /** The top three as billboard cards on actual podium steps (2 · 1 · 3 on wide screens). */
@@ -110,7 +110,7 @@ function PodiumCard({
       </div>
 
       <div className="mt-4">
-        <Score score={entry.score} size={champion ? "text-8xl sm:text-9xl" : "text-7xl sm:text-8xl"} />
+        <Score score={entry.score} size={champion ? "text-8xl sm:text-9xl md:text-7xl lg:text-9xl" : "text-7xl sm:text-8xl md:text-6xl lg:text-8xl"} />
       </div>
 
       <VerdictLabel label={entry.label} className="mt-3 max-w-full break-words" />
