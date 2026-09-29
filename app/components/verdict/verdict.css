@@ -1,0 +1,159 @@
+/*
+ * Motion for the verdict reveal and the judging theatre. Pure CSS so the
+ * server-rendered page animates before (and without) any JavaScript.
+ * The global prefers-reduced-motion rule in app.css collapses every duration;
+ * the block at the bottom also drops the delays.
+ */
+
+/* Score count-up: an animatable integer, rendered through a CSS counter. */
+@property --jev-count {
+  syntax: "<integer>";
+  initial-value: 0;
+  inherits: false;
+}
+
+@keyframes jev-count-up {
+  from {
+    --jev-count: 0;
+  }
+}
+
+.jev-count {
+  counter-reset: jev-count var(--jev-count);
+  animation: jev-count-up var(--jev-count-duration, 1.8s) cubic-bezier(0.16, 1, 0.3, 1) var(--jev-count-delay, 0s) both;
+}
+.jev-count::after {
+  content: counter(jev-count);
+}
+
+/* Staggered entrances. */
+@keyframes jev-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+.jev-rise {
+  animation: jev-rise 0.5s ease-out var(--jev-delay, 0s) both;
+}
+
+/* The deadpan rubber stamp. */
+@keyframes jev-stamp {
+  0% {
+    opacity: 0;
+    transform: scale(2.4) rotate(-14deg);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(0.94) rotate(-5deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(-5deg);
+  }
+}
+.jev-stamp {
+  transform: rotate(-5deg);
+  animation: jev-stamp 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) var(--jev-delay, 0s) both;
+}
+
+/* Confetti burst for scores worth bragging about. */
+.jev-confetti {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 20;
+}
+.jev-confetti > i {
+  position: absolute;
+  left: var(--ox, 50%);
+  top: var(--oy, 40%);
+  width: 10px;
+  height: 16px;
+  background: var(--c);
+  border: 2px solid #111110;
+  opacity: 0;
+  animation: jev-burst 1.7s cubic-bezier(0.12, 0.75, 0.35, 1) var(--d, 1.9s) both;
+}
+@keyframes jev-burst {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(0deg) scale(0.3);
+  }
+  6% {
+    opacity: 1;
+  }
+  55% {
+    opacity: 1;
+    transform: translate(calc(-50% + var(--x)), calc(-50% + var(--y))) rotate(var(--r)) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--x) * 1.25), calc(-50% + var(--y) + 180px)) rotate(calc(var(--r) * 2))
+      scale(0.9);
+  }
+}
+
+/* Duel Pit: contenders slide in from their corners. */
+@keyframes jev-from-left {
+  from {
+    opacity: 0;
+    transform: translateX(-48px);
+  }
+}
+@keyframes jev-from-right {
+  from {
+    opacity: 0;
+    transform: translateX(48px);
+  }
+}
+.jev-from-left {
+  animation: jev-from-left 0.5s cubic-bezier(0.2, 1.3, 0.4, 1) both;
+}
+.jev-from-right {
+  animation: jev-from-right 0.5s cubic-bezier(0.2, 1.3, 0.4, 1) both;
+}
+
+/* The active step on the progress rail. */
+@keyframes jev-throb {
+  0%,
+  100% {
+    opacity: 0.15;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.06);
+  }
+}
+.jev-throb {
+  animation: jev-throb 1.4s ease-in-out infinite;
+}
+
+/* The judging stage's sweeping spotlight. */
+@keyframes jev-spotlight {
+  0%,
+  100% {
+    transform: translateX(-18%);
+  }
+  50% {
+    transform: translateX(18%);
+  }
+}
+.jev-spotlight {
+  animation: jev-spotlight 7s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jev-count,
+  .jev-rise,
+  .jev-stamp,
+  .jev-from-left,
+  .jev-from-right {
+    animation-delay: 0s !important;
+  }
+  .jev-confetti {
+    display: none;
+  }
+}
