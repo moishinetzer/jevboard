@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { SqlClient } from "effect/sql";
 import { JudgmentQueue } from "../services/JudgmentQueue";
 import { Orders } from "../services/Orders";
-import { CLAIM_STALE_MS } from "../services/Pipeline";
+import { CLAIM_STALE_MS, UNCLAIMED_STALE_MS } from "../services/Pipeline";
 
 /** Unpaid orders older than this are no longer swept (checkout sessions expire after ~1h). */
 const SWEEP_WINDOW_MS = 3 * 60 * 60 * 1000;
@@ -16,7 +16,7 @@ const PRESENCE_TTL_MS = 60 * 60 * 1000;
 /**
  * The cron trigger (every minute):
  * - confirms payments for buyers who paid and closed the tab,
- * - re-queues judgments that stalled (evicted worker, exhausted retries…),
+ * - re-queues judgments that stalled (evicted worker, lost queue message…),
  * - prunes old presence heartbeats.
  * Every step is idempotent and failures in one don't stop the others.
  */
@@ -38,7 +38,7 @@ export const runMaintenance = Effect.gen(function* () {
     );
   }
 
-  const stalled = yield* orders.stalled(now - STALL_MS);
+  const stalled = yield* orders.stalled(now - STALL_MS, now - UNCLAIMED_STALE_MS);
   // Re-queued as-is: the stale `updated_at` is what lets the judging stage re-claim them.
   for (const order of stalled) yield* queue.enqueue(order.id);
 

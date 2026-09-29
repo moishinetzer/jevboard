@@ -94,8 +94,11 @@ export class Orders extends Context.Service<
     readonly claim: (id: OrderId, staleBefore: number) => Effect.Effect<Option.Option<string>>;
     /** Gives a claimed order back (status `paid`) so a queue retry can claim it right away. */
     readonly release: (id: OrderId, token: string) => Effect.Effect<void>;
-    /** In-flight orders not touched since `before` (epoch ms) — re-queued by the cron trigger. */
-    readonly stalled: (before: number) => Effect.Effect<ReadonlyArray<Order>>;
+    /**
+     * Orders the cron should re-queue: paid but unclaimed since `unclaimedBefore`
+     * (their queue message was lost), or in flight and untouched since `before`.
+     */
+    readonly stalled: (before: number, unclaimedBefore: number) => Effect.Effect<ReadonlyArray<Order>>;
     /** failed -> paid, so a paid-for judgment can be retried for free. */
     readonly retry: (id: OrderId) => Effect.Effect<boolean>;
     /** Orders a worker must (re)process, oldest first — used on boot for crash recovery. */
@@ -252,9 +255,11 @@ export class Orders extends Context.Service<
           WHERE id = ${id} AND claim_token = ${token} AND status NOT IN ('complete', 'failed')`;
       }, Effect.orDie);
 
-      const stalled = Effect.fn("Orders.stalled")(function* (before: number) {
+      const stalled = Effect.fn("Orders.stalled")(function* (before: number, unclaimedBefore: number) {
         const rows = yield* sql<OrderRow>`
-          SELECT * FROM orders WHERE status IN ${sql.in(IN_FLIGHT_STATUSES)} AND updated_at < ${before}
+          SELECT * FROM orders
+          WHERE (status = 'paid' AND updated_at < ${unclaimedBefore})
+             OR (status IN ${sql.in(IN_FLIGHT_STATUSES)} AND updated_at < ${before})
           ORDER BY updated_at ASC LIMIT 50`;
         return rows.map(toOrder);
       }, Effect.orDie);

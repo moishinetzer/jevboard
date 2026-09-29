@@ -13,6 +13,16 @@ import { Orders } from "./Orders";
  */
 export const CLAIM_STALE_MS = 20 * 60 * 1000;
 
+/** A paid order nobody has claimed for this long lost its queue message; re-queue it. */
+export const UNCLAIMED_STALE_MS = 2 * 60 * 1000;
+
+/**
+ * Wall-clock budget for all duels of one placement. The placement queue runs
+ * one job at a time inside a 15-minute consumer limit, so a slow Jev must not
+ * stall it: once the budget is spent, remaining duels go to seniority.
+ */
+const TIEBREAK_BUDGET_MS = 8 * 60 * 1000;
+
 /** Up to 2 retries with jittered exponential backoff for transient failures. */
 const transientRetry = Schedule.max([Schedule.exponential("1 second").pipe(Schedule.jittered), Schedule.recurs(2)]);
 
@@ -95,7 +105,7 @@ export class Pipeline extends Context.Service<
       const board = yield* Board;
       const crawler = yield* Crawler;
       const judge = yield* Judge;
-      // Belt and braces for in-process use; on Cloudflare the placement queue serializes.
+      // Serializes placements for the in-process runner; on Cloudflare the placement queue does.
       const placementLock = yield* Semaphore.make(1);
 
       /**
@@ -123,9 +133,21 @@ export class Pipeline extends Context.Service<
           `${verdict.score} = ${verdict.score}. Jev doesn't do draws. ${group.length} rival${group.length === 1 ? "" : "s"} share this score — entering the Duel Pit…`,
         );
 
+        const deadline = Date.now() + TIEBREAK_BUDGET_MS;
         while (lo < hi) {
           const mid = (lo + hi) >> 1;
           const opponent = group[mid]!;
+          if (Date.now() > deadline) {
+            // Out of time: the rest of the group keeps its seniority.
+            duels.push({
+              opponentId: opponent.id,
+              opponentSiteKey: opponent.siteKey,
+              challengerWon: false,
+              reason: "Jev ran out of court time, so seniority wins this one.",
+            });
+            lo = mid + 1;
+            continue;
+          }
           yield* orders.setDetail(
             orderId,
             `⚔️ Duel ${duels.length + 1} of ~${expected}: ${siteKey} vs ${opponent.siteKey} (both ${verdict.score})`,
@@ -139,7 +161,7 @@ export class Pipeline extends Context.Service<
               b: challengerIsA ? opponent.contender : challenger,
             })
             .pipe(
-              Effect.retry({ schedule: transientRetry, while: (error: JudgeError) => error.retryable }),
+              Effect.retry({ times: 1, while: (error: JudgeError) => error.retryable }),
               Effect.catch((error) =>
                 Effect.logWarning("Duel failed, seniority wins", error).pipe(
                   Effect.as({
@@ -294,8 +316,9 @@ export class Pipeline extends Context.Service<
           Effect.withSpan("Pipeline.judgeJob"),
         );
 
+      // The placement queue (max_concurrency 1) serializes jobs on Cloudflare.
       const placeJob = (orderId: OrderId) =>
-        Semaphore.withPermit(placementLock)(placeStage(orderId)).pipe(
+        placeStage(orderId).pipe(
           Effect.catchTag("NotFound", () => Effect.logWarning("Order vanished", { orderId })),
           Effect.annotateLogs({ orderId }),
           Effect.withSpan("Pipeline.placeJob"),
@@ -315,7 +338,10 @@ export class Pipeline extends Context.Service<
             Effect.catchTag("JudgeError", (error) =>
               orders.fail(orderId, judgeFailureMessage(error)).pipe(Effect.as("failed" as const)),
             ),
-            Effect.flatMap((result) => (result === "judged" ? placeJob(orderId) : Effect.void)),
+            // In-process there's no queue: the lock plays its part.
+            Effect.flatMap((result) =>
+              result === "judged" ? Semaphore.withPermit(placementLock)(placeJob(orderId)) : Effect.void,
+            ),
             Effect.catchCause((cause) =>
               Cause.hasInterruptsOnly(cause)
                 ? Effect.interrupt

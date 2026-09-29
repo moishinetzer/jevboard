@@ -77,5 +77,22 @@ describe("maintenance (cron trigger)", () => {
       assert.strictEqual(done.status, "complete");
     }).pipe(Effect.provide(layerFor({ scores: { "stuck.io": [333] }, strength: {}, duels: 0 }))),
   );
-});
 
+  it.live("re-queues paid orders whose queue message was lost", () =>
+    Effect.gen(function* () {
+      const orders = yield* Orders;
+      const sql = yield* SqlClient.SqlClient;
+      const order = yield* orders.create({
+        customerId: customer,
+        siteKey: "lost-message.com",
+        url: "https://lost-message.com/",
+        kind: "new",
+        entryId: null,
+      });
+      yield* orders.markPaid(order.id); // …and the enqueue never happened
+      yield* sql`UPDATE orders SET updated_at = ${Date.now() - 5 * 60_000} WHERE id = ${order.id}`;
+      yield* runMaintenance;
+      assert.strictEqual((yield* settled(order.id)).status, "complete");
+    }).pipe(Effect.provide(layerFor({ scores: { "lost-message.com": [444] }, strength: {}, duels: 0 }))),
+  );
+});
