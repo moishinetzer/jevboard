@@ -2,11 +2,12 @@ import { Effect } from "effect";
 import { SqlClient } from "effect/sql";
 import { JudgmentQueue } from "../services/JudgmentQueue";
 import { Orders } from "../services/Orders";
+import { CLAIM_STALE_MS } from "../services/Pipeline";
 
 /** Unpaid orders older than this are no longer swept (checkout sessions expire after ~1h). */
 const SWEEP_WINDOW_MS = 26 * 60 * 60 * 1000;
 /** An in-flight order untouched for this long is assumed lost and re-queued. */
-const STALL_MS = 10 * 60 * 1000;
+const STALL_MS = CLAIM_STALE_MS;
 /** Presence heartbeats older than this are pruned. */
 const PRESENCE_TTL_MS = 60 * 60 * 1000;
 
@@ -33,10 +34,8 @@ export const runMaintenance = Effect.gen(function* () {
   }
 
   const stalled = yield* orders.stalled(now - STALL_MS);
-  for (const order of stalled) {
-    yield* orders.setDetail(order.id, "Jev lost his place in the docket. Picking it back up…");
-    yield* queue.enqueue(order.id);
-  }
+  // Re-queued as-is: the stale `updated_at` is what lets the judging stage re-claim them.
+  for (const order of stalled) yield* queue.enqueue(order.id);
 
   yield* sql`DELETE FROM presence WHERE last_seen_at < ${now - PRESENCE_TTL_MS}`.pipe(Effect.orDie);
 

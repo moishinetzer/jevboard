@@ -7,6 +7,9 @@ import { Crawler } from "./Crawler";
 import { Judge } from "./Judge";
 import { Orders } from "./Orders";
 
+/** An in-flight judgment untouched for this long is considered abandoned and may be re-claimed. */
+export const CLAIM_STALE_MS = 10 * 60 * 1000;
+
 /** Up to 2 retries with jittered exponential backoff for transient failures. */
 const transientRetry = Schedule.max([Schedule.exponential("1 second").pipe(Schedule.jittered), Schedule.recurs(2)]);
 
@@ -156,6 +159,8 @@ export class Pipeline extends Context.Service<
         const order = yield* orders.get(orderId);
         if (order.status === "pending_payment" || TERMINAL_STATUSES.includes(order.status)) return "skipped" as const;
         if (Option.isSome(yield* orders.stagedVerdict(orderId))) return "judged" as const;
+        // Someone else is already on it (duplicate delivery) unless it went quiet.
+        if (!(yield* orders.claim(orderId, Date.now() - CLAIM_STALE_MS))) return "skipped" as const;
         const host = hostOf(order.url);
 
         yield* orders.setStage(orderId, "crawling", `Jev is knocking on ${host}…`);

@@ -1,6 +1,5 @@
 import { Effect, Option } from "effect";
 import type { BoardEntry, Duel, Judgment, Order, OrderStatus } from "../domain/models";
-import { IN_FLIGHT_STATUSES } from "../domain/models";
 import { Board } from "../services/Board";
 import { JudgmentQueue } from "../services/JudgmentQueue";
 import { Orders } from "../services/Orders";
@@ -73,10 +72,8 @@ export const loadJudging = Effect.fn("loadJudging")(function* (orderId: string) 
       yield* queue.enqueue(order.id);
       order = yield* orders.get(orderId);
     }
-  } else if (IN_FLIGHT_STATUSES.includes(order.status)) {
-    // Idempotent: makes sure a paid order is being worked on.
-    yield* queue.enqueue(order.id);
   }
+  // In-flight orders are the queues' job; the cron trigger re-queues any that stall.
 
   const board = yield* Board;
   let result: JudgingView["result"] = null;

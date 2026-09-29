@@ -81,6 +81,12 @@ export class Orders extends Context.Service<
     readonly stageVerdict: (id: OrderId, staged: StagedVerdict) => Effect.Effect<void>;
     /** The parked verdict, if the judging stage already finished. */
     readonly stagedVerdict: (id: OrderId) => Effect.Effect<Option.Option<StagedVerdict>>;
+    /**
+     * Atomically claims a paid order for judging: succeeds if it is freshly
+     * paid, or in flight but untouched since `staleBefore` (a lost worker).
+     * Queues deliver at least once; this keeps duplicate jobs from crawling twice.
+     */
+    readonly claim: (id: OrderId, staleBefore: number) => Effect.Effect<boolean>;
     /** In-flight orders not touched since `before` (epoch ms) — re-queued by the cron trigger. */
     readonly stalled: (before: number) => Effect.Effect<ReadonlyArray<Order>>;
     /** failed -> paid, so a paid-for judgment can be retried for free. */
@@ -207,6 +213,16 @@ export class Orders extends Context.Service<
         });
       }, Effect.orDie);
 
+      const claim = Effect.fn("Orders.claim")(function* (id: OrderId, staleBefore: number) {
+        const now = Date.now();
+        const rows = yield* sql<{ id: string }>`
+          UPDATE orders SET status = 'crawling', updated_at = ${now}
+          WHERE id = ${id}
+            AND (status = 'paid' OR (status IN ('crawling', 'judging') AND updated_at < ${staleBefore}))
+          RETURNING id`;
+        return rows.length > 0;
+      }, Effect.orDie);
+
       const stalled = Effect.fn("Orders.stalled")(function* (before: number) {
         const rows = yield* sql<OrderRow>`
           SELECT * FROM orders WHERE status IN ${sql.in(IN_FLIGHT_STATUSES)} AND updated_at < ${before}
@@ -257,6 +273,7 @@ export class Orders extends Context.Service<
         fail,
         stageVerdict,
         stagedVerdict,
+        claim,
         stalled,
         retry,
         inFlight,
