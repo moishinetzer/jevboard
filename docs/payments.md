@@ -18,10 +18,11 @@ are stored in that customer's `metadata`. Orders can't share credits or cancel e
    Confirmation runs in three places:
    - the judging page, when the buyer returns;
    - the webhook below;
-   - a sweeper, every minute, for unpaid orders less than 26 hours old.
+   - the cron trigger (`scheduled`, every minute), for unpaid orders from the last 3 hours: orders younger
+     than 15 minutes are checked every minute, older ones every 10 minutes.
 3. **Webhook** (optional, recommended): Autumn sends `billing.updated` to `/api/autumn/webhook`. After checking
    the Svix signature, the app runs the same confirmation, so a buyer who paid and closed the tab is judged within
-   seconds instead of waiting for the sweeper. The webhook never marks anything paid on its own.
+   seconds instead of waiting for the cron trigger. The webhook never marks anything paid on its own.
 
 The code is in `app/.server/services/payments/` (`AutumnClient.ts`, `AutumnPayments.ts`, `webhook.ts`).
 
@@ -51,7 +52,7 @@ If you use other ids, set `AUTUMN_PLAN_ID` and `AUTUMN_FEATURE_ID`.
 
 | Variable | Value |
 |---|---|
-| `AUTUMN_SECRET_KEY` | `am_sk_test_…` (sandbox) or `am_sk_live_…` (production). The prefix picks the environment. |
+| `AUTUMN_SECRET_KEY` | `am_sk_test_…` (sandbox) or `am_sk_live_…` (production). The prefix picks the environment. Set it with `wrangler secret put` (locally: `.dev.vars`). |
 | `PUBLIC_URL` | The public origin, e.g. `https://jevboard.com`. It is used to build the Stripe return URLs. |
 | `AUTUMN_API_VERSION` | `2.4.0` (the default). Response shapes depend on it. |
 | `AUTUMN_API_URL` | `https://api.useautumn.com/v1` (the default). |
@@ -66,7 +67,8 @@ Stripe account, connected in the Autumn dashboard under *Deploy to Production*.
    - event: `billing.updated`
 
    Autumn accepts only public https URLs. For local testing, use a tunnel such as ngrok.
-2. Copy the endpoint's signing secret (`whsec_…`) into **`AUTUMN_WEBHOOK_SECRET`**. The secret is shown once.
+2. Copy the endpoint's signing secret (`whsec_…`) into **`AUTUMN_WEBHOOK_SECRET`** (`wrangler secret put AUTUMN_WEBHOOK_SECRET`).
+   The secret is shown once.
 3. You can also let `atmn` manage the endpoint. Push with `AUTUMN_WEBHOOK_URL=<url>` set, and optionally
    `AUTUMN_WEBHOOK_ENV=live`. `atmn` writes the new secret to your env file as
    `AUTUMN_WEBHOOK_JEVBOARD_<ENV>_SECRET`; copy it into `AUTUMN_WEBHOOK_SECRET`.
@@ -79,7 +81,7 @@ The route answers:
 - **503** when Autumn can't confirm the payment yet, so that Svix retries.
 
 Without a webhook, payments are still picked up: by the judging page when the buyer returns, and by the
-one-minute sweeper otherwise.
+cron trigger otherwise.
 
 ### 4. Test cards (sandbox)
 
