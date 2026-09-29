@@ -189,4 +189,32 @@ describe("Pipeline", () => {
       assert.strictEqual((yield* (yield* Board).stats).entries, 0);
     }).pipe(Effect.provide(makeTestLayer(s)));
   });
+
+  it.live("claims orders so a duplicate queue delivery never judges twice", () => {
+    const s = script({ scores: { "dup.com": [701] }, judged: 0, judgeDelayMs: 30 });
+    return Effect.gen(function* () {
+      const orders = yield* Orders;
+      const pipeline = yield* Pipeline;
+      const order = yield* orders.create({
+        customerId: customer,
+        siteKey: "dup.com",
+        url: "https://dup.com/",
+        kind: "new",
+        entryId: null,
+      });
+      yield* orders.markPaid(order.id);
+      const [first, second] = yield* Effect.all([pipeline.judge(order.id), pipeline.judge(order.id)], {
+        concurrency: 2,
+      });
+      assert.deepStrictEqual([first, second].sort(), ["judged", "skipped"]);
+      assert.strictEqual(s.judged, 1);
+      // A redelivery after the verdict is staged just forwards to placement again.
+      assert.strictEqual(yield* pipeline.judge(order.id), "judged");
+      yield* pipeline.place(order.id);
+      yield* pipeline.place(order.id); // duplicate placement message: no-op
+      const board = yield* Board;
+      assert.strictEqual((yield* board.getBySiteKey("dup.com")).rolls, 1);
+      assert.strictEqual((yield* board.stats).judgments, 1);
+    }).pipe(Effect.provide(makeTestLayer(s)));
+  });
 });

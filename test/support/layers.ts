@@ -47,6 +47,10 @@ export interface Script {
   readonly strength: Record<string, number>;
   readonly overrides?: Record<string, Partial<Verdict>>;
   duels: number;
+  /** Counts judge calls when present. */
+  judged?: number;
+  /** Makes each judge call take this long (use with it.live). */
+  readonly judgeDelayMs?: number;
 }
 
 export const ScriptedJudge = (script: Script) =>
@@ -55,7 +59,9 @@ export const ScriptedJudge = (script: Script) =>
     Judge.of({
       kind: "mock",
       judge: (input) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
+          if (script.judgeDelayMs) yield* Effect.sleep(`${script.judgeDelayMs} millis`);
+          if (script.judged !== undefined) script.judged++;
           const score = script.scores[input.siteKey]?.shift() ?? 500;
           return {
             verdict: verdictFor(input.siteKey, score, script.overrides?.[input.siteKey]),
