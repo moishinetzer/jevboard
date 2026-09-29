@@ -66,3 +66,19 @@ if (process.env.NODE_ENV !== "test") {
     console.error("Failed to start the Jevboard backend", error);
   });
 }
+
+declare global {
+  var __jevShutdownHook: boolean | undefined;
+}
+
+// Drain on shutdown: interrupt workers (their orders stay in flight and are
+// recovered on the next boot) and close SQLite cleanly. Registered once.
+if (!globalThis.__jevShutdownHook) {
+  globalThis.__jevShutdownHook = true;
+  for (const signal of ["SIGTERM", "SIGINT"] as const) {
+    process.once(signal, () => {
+      const current = globalThis.__jevRuntime;
+      void (current ? current.dispose() : Promise.resolve()).finally(() => process.exit(0));
+    });
+  }
+}

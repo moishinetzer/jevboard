@@ -17,7 +17,7 @@ const hash = (input: string): number => {
   return h >>> 0;
 };
 
-const pick = <A>(items: ReadonlyArray<A>, seed: number): A => items[seed % items.length]!;
+const pick = <A>(items: ReadonlyArray<A>, seed: number): A => items[Math.abs(Math.trunc(seed)) % items.length]!;
 
 const LABELS = [
   "genuinely-useful-but-dressed-like-a-2019-saas",
@@ -75,7 +75,7 @@ export const makeMockVerdict = (siteKey: string, snapshot: SiteSnapshot, roll: n
   const raw = 150 + (seed % 800);
   const score = Math.max(1, Math.min(1000, Math.round(raw / 25) * 25));
   const allText = snapshot.pages.map((page) => page.text).join(" ");
-  const sub = (offset: number) => Math.min(100, Math.max(0, Math.round(score / 10) + ((seed >> offset) % 21) - 10));
+  const sub = (offset: number) => Math.min(100, Math.max(0, Math.round(score / 10) + ((seed >>> offset) % 21) - 10));
   const name = (snapshot.title.split(/[|\-–—:]/)[0] ?? "").trim() || siteKey;
 
   return {
@@ -85,8 +85,8 @@ export const makeMockVerdict = (siteKey: string, snapshot: SiteSnapshot, roll: n
       `${name} is a website Jev visited. It exists, and it would like you to know about it.`,
     category: categoryFor(snapshot, seed),
     score,
-    label: pick(LABELS, seed >> 3),
-    verdict: pick(ROASTS, seed >> 5),
+    label: pick(LABELS, seed >>> 3),
+    verdict: pick(ROASTS, seed >>> 5),
     reasoning: `Mock Jev skimmed ${snapshot.pages.length} page(s) of ${siteKey}. The score is a deterministic placeholder — set ANTHROPIC_API_KEY for the real Jev.`,
     subscores: {
       clarity: sub(1),
@@ -95,8 +95,8 @@ export const makeMockVerdict = (siteKey: string, snapshot: SiteSnapshot, roll: n
       trust: sub(10),
       wouldJevPay: sub(13),
     },
-    strengths: [pick(STRENGTHS, seed >> 2), pick(STRENGTHS, seed >> 9)].filter((v, i, all) => all.indexOf(v) === i),
-    weaknesses: [pick(WEAKNESSES, seed >> 4), pick(WEAKNESSES, seed >> 11)].filter((v, i, all) => all.indexOf(v) === i),
+    strengths: [pick(STRENGTHS, seed >>> 2), pick(STRENGTHS, seed >>> 9)].filter((v, i, all) => all.indexOf(v) === i),
+    weaknesses: [pick(WEAKNESSES, seed >>> 4), pick(WEAKNESSES, seed >>> 11)].filter((v, i, all) => all.indexOf(v) === i),
     receipts: snapshot.pages
       .flatMap((page) => page.headings)
       .filter((heading) => heading.length > 3)
