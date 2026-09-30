@@ -13,9 +13,8 @@ import type { Route } from "./+types/root";
 import { effectLoader } from "./.server/http";
 import { loadShell } from "./.server/flows/shell";
 import { visitorMiddleware } from "./.server/visitor";
-import { LiveProvider } from "./components/live";
 import { JevFace } from "./components/logo";
-import { ModeBanner, SiteFooter, SiteHeader, Tape } from "./components/shell";
+import { ModeBanner, SiteFooter, SiteHeader } from "./components/shell";
 import { themeBootScript } from "./components/theme-toggle";
 import "./app.css";
 
@@ -23,10 +22,7 @@ export const middleware: Route.MiddlewareFunction[] = [visitorMiddleware];
 
 export const loader = effectLoader("root", () => loadShell);
 
-/**
- * The shell's live data refreshes itself through /api/feed, so the root loader
- * only re-runs after form submissions — not on every navigation or poll.
- */
+/** The shell only shows the provider mode, so the root loader re-runs after form submissions only. */
 export const shouldRevalidate: ShouldRevalidateFunction = ({ formMethod, defaultShouldRevalidate }) =>
   formMethod !== undefined && formMethod.toUpperCase() !== "GET" ? defaultShouldRevalidate : false;
 
@@ -35,11 +31,11 @@ export const links: Route.LinksFunction = () => [
 ];
 
 export const meta: Route.MetaFunction = () => [
-  { title: "Jevboard — Pay $5. Get judged by Jev." },
+  { title: "Jevboard: how useful is your business?" },
   {
     name: "description",
     content:
-      "Paste your site. Pay $5. Jev crawls it, writes the TL;DR and decides how useful your business is, from 1 to 1000. You can't buy #1 — you can only buy Jev's attention.",
+      "Jev, an AI judge, reads your website, sums up what you do and scores how useful your business is from 1 to 1000. Every business lands on the public leaderboard.",
   },
   { property: "og:site_name", content: "Jevboard" },
   { property: "og:type", content: "website" },
@@ -69,13 +65,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App({ loaderData }: Route.ComponentProps) {
   return (
-    <LiveProvider tape={loaderData.tape} counters={loaderData.counters} now={loaderData.now}>
+    <>
       <ModeBanner mode={loaderData.mode} />
       <SiteHeader />
-      <Tape />
       <Outlet />
       <SiteFooter />
-    </LiveProvider>
+    </>
   );
 }
 
@@ -109,10 +104,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       <p className="mx-auto mt-4 max-w-xl text-lg text-ink-soft">{details}</p>
       <div className="mt-8 flex justify-center gap-3">
         <Link to="/" className="btn px-5 py-3">
-          Back to the board
-        </Link>
-        <Link to="/#judge" className="btn btn-ghost px-5 py-3">
-          Get judged — $5
+          Back to the leaderboard
         </Link>
       </div>
       {stack ? (
@@ -125,11 +117,10 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 
   if (!shell) return body;
   return (
-    <LiveProvider tape={shell.tape} counters={shell.counters} now={shell.now}>
+    <>
       <SiteHeader />
-      <Tape />
       {body}
       <SiteFooter />
-    </LiveProvider>
+    </>
   );
 }

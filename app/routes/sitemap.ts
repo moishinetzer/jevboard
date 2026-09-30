@@ -13,7 +13,7 @@ export const loader = effectLoader("sitemap", () =>
     const board = yield* Board;
     const entries = yield* board.sitemap;
     const urls = [
-      ...["/", "/hall", "/stats", "/faq"].map((path) => ({ loc: `${origin}${path}`, lastmod: null as number | null })),
+      ...["/", "/faq"].map((path) => ({ loc: `${origin}${path}`, lastmod: null as number | null })),
       ...entries.map((entry) => ({ loc: `${origin}${entryPath(entry.siteKey)}`, lastmod: entry.lastJudgedAt })),
     ];
     const body =

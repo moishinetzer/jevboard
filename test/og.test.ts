@@ -38,9 +38,7 @@ const entry: EntryCardProps = {
   score: 812,
   rank: 14,
   total: 931,
-  label: "genuinely-useful-but-dressed-like-a-2019-saas",
-  roast:
-    "You solve a real problem and explain it in under ten seconds. The stock photo of people high-fiving is under investigation.",
+  tldr: "Online payments infrastructure for businesses of every size, from startups to large enterprises, with APIs for checkout, billing and payouts.",
   serial: 42,
   roll: 1,
   host: "jevboard.com",
@@ -166,7 +164,7 @@ describe("rendering", () => {
     preview("entry.png", png);
   }, 30_000);
 
-  it("survives worst-case copy (long key, long label, long roast, 1000, retrial, emoji)", async () => {
+  it("survives worst-case copy (long key, long TL;DR, 1000, retrial, emoji)", async () => {
     const png = await entryCardPng(
       "j2",
       {
@@ -175,8 +173,7 @@ describe("rendering", () => {
         score: 1000,
         rank: 1,
         total: 123456,
-        label: "another-ai-wrapper-with-a-waitlist-and-a-gradient-and-a-discord-and-a-token-and-a-podcast",
-        roast: "Jev read four pages 👀 and still doesn't know what you do. ".repeat(6),
+        tldr: "An AI assistant 👀 with a waitlist, a Discord, a token and a podcast, for people who want all four. ".repeat(6),
         serial: 123456,
         roll: 17,
       },

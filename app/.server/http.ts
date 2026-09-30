@@ -3,7 +3,6 @@ import type { RouterContextProvider } from "react-router";
 import { AppConfig } from "./config";
 import { toRouteOutcome } from "./route-errors";
 import { type AppServices, runtime } from "./runtime";
-import { Presence } from "./services/Presence";
 import { visitorContext } from "./visitor";
 
 /**
@@ -67,11 +66,6 @@ const provideRequest = <A, E>(effect: Effect.Effect<A, E, RouteServices>, args: 
     const config = yield* AppConfig;
     const visitor = args.context.get(visitorContext);
     const visitorId = visitor?.id ?? "anonymous";
-    // Machine endpoints (webhooks, badges, images) don't count as visitors, and
-    // neither does anyone whose cookie never comes back (bots, curl loops).
-    const pathname = new URL(args.request.url).pathname;
-    const human = !/^\/(api\/autumn|badge|og|healthz|sitemap)/.test(pathname);
-    if (human && visitor && !visitor.isNew) yield* (yield* Presence).heartbeat(visitorId);
     return yield* effect.pipe(
       Effect.provideService(
         CurrentRequest,

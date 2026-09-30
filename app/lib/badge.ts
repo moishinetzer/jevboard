@@ -21,8 +21,6 @@ export interface BadgeEntry {
   readonly rank: number;
   /** Entries currently on the board ("#14 of 931"). */
   readonly total: number;
-  /** Jev's hyphenated verdict label. */
-  readonly label: string;
 }
 
 export interface BadgeOptions {
@@ -370,7 +368,7 @@ export const buildBadge = (entry: BadgeEntry, options: BadgeOptions = {}): strin
         scoreUnit: "/1000",
         headline: `#${entry.rank} of ${entry.total}`,
         subline: tier.label.toUpperCase(),
-        caption: `“${entry.label}”`,
+        caption: "Judged by Jev on Jevboard",
       });
     default:
       return pill({

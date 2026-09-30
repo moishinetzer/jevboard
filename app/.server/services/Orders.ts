@@ -107,6 +107,8 @@ export class Orders extends Context.Service<
     readonly awaitingPayment: (since: number) => Effect.Effect<ReadonlyArray<Order>>;
     /** Recent orders for a customer (so the home page can say "your judgment is still cooking"). */
     readonly recentForCustomer: (customerId: string, limit: number) => Effect.Effect<ReadonlyArray<Order>>;
+    /** Whether this customer paid for a judgment of this site: only they see its "Rejudge" button. */
+    readonly paidForSite: (customerId: string, siteKey: string) => Effect.Effect<boolean>;
   }
 >()("jevboard/Orders") {
   static readonly layer = Layer.effect(
@@ -296,6 +298,14 @@ export class Orders extends Context.Service<
         return rows.map(toOrder);
       }, Effect.orDie);
 
+      const paidForSite = Effect.fn("Orders.paidForSite")(function* (customerId: string, siteKey: string) {
+        const rows = yield* sql<{ readonly one: number }>`
+          SELECT 1 AS one FROM orders
+          WHERE customer_id = ${customerId} AND site_key = ${siteKey} AND status != 'pending_payment'
+          LIMIT 1`;
+        return rows.length > 0;
+      }, Effect.orDie);
+
       return Orders.of({
         create,
         get,
@@ -314,6 +324,7 @@ export class Orders extends Context.Service<
         inFlight,
         awaitingPayment,
         recentForCustomer,
+        paidForSite,
       });
     }),
   );

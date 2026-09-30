@@ -25,4 +25,4 @@ export const action = effectAction("judge", ({ request }: Route.ActionArgs) =>
   }),
 );
 
-export const loader = () => redirect("/#judge");
+export const loader = () => redirect("/#add");

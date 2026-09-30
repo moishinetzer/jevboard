@@ -4,7 +4,7 @@ import type { ContentFlag } from "~/.server/domain/models";
 import type { JudgingView } from "~/.server/flows/judging";
 import { JudgeForm } from "~/components/judge-form";
 import { JevFace } from "~/components/logo";
-import { Favicon, TierBadge, VerdictLabel } from "~/components/ui";
+import { Favicon, TierBadge } from "~/components/ui";
 import { formatCount, formatDelta } from "~/lib/format";
 import { entryPath } from "~/lib/site-key";
 import { Section } from "./controls";
@@ -128,7 +128,6 @@ export function VerdictReveal({ order, result, origin }: { order: OrderView; res
     score: judgment.score,
     rank: entry.rank,
     total: totalEntries,
-    label: judgment.label,
     url,
     rolls: judgment.roll,
     previousScore: judgment.previousScore,
@@ -186,7 +185,6 @@ export function VerdictReveal({ order, result, origin }: { order: OrderView; res
             </p>
             <div className="jev-rise mt-4 flex flex-wrap items-center gap-2" style={delay(LANDED - 200)}>
               <TierBadge score={judgment.score} />
-              <VerdictLabel label={judgment.label} className="text-sm!" />
               {entry.rank === 1 ? <span className="sticker">👑 New #1</span> : null}
               {judgment.manipulationAttempt ? (
                 <span className="sticker bg-hot!">🚨 Caught trying to bribe Jev</span>

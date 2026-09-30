@@ -172,26 +172,14 @@ const canonicalizeVerdict = (json: unknown): unknown => {
 // Tidying the verdict
 // ---------------------------------------------------------------------------
 
-const slug = (label: string): string =>
-  label
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/['’]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 120)
-    .replace(/-+$/, "");
-
 const tidyList = (items: ReadonlyArray<string>): Array<string> =>
   [...new Set(items.map((item) => item.trim()).filter((item) => item !== ""))].slice(0, 3);
 
-/** Cosmetic clean-up the schema can't express: trimmed text, a real slug label, at most 3 list items. */
+/** Cosmetic clean-up the schema can't express: trimmed text, at most 3 list items. */
 export const normalizeVerdict = (verdict: Verdict, fallbackName: string): Verdict => ({
   ...verdict,
   name: verdict.name.trim() || fallbackName,
   tldr: verdict.tldr.trim(),
-  label: slug(verdict.label) || "left-the-bench-speechless",
   verdict: verdict.verdict.trim(),
   reasoning: verdict.reasoning.trim(),
   strengths: tidyList(verdict.strengths),

@@ -26,7 +26,6 @@ export const verdictFor = (siteKey: string, score: number, overrides: Partial<Ve
   tldr: `${siteKey} does things.`,
   category: "SaaS",
   score,
-  label: "test-label",
   verdict: "Fine.",
   reasoning: "Because.",
   subscores: { clarity: 50, demand: 50, originality: 50, trust: 50, wouldJevPay: 50 },

@@ -68,10 +68,8 @@ export interface EntryCardProps {
   readonly score: number;
   readonly rank: number;
   readonly total: number;
-  /** Hyphenated verdict label. */
-  readonly label: string;
-  /** Jev's roast line. */
-  readonly roast: string;
+  /** What the business does, in Jev's words. */
+  readonly tldr: string;
   /** Global judgment serial ("Judgment #0042"). */
   readonly serial: number;
   /** 1 for a first judgment, 2+ for retrials. */
@@ -89,8 +87,7 @@ export function EntryCard(props: EntryCardProps) {
   const oneLine = fitFont(siteKey, LEFT_COLUMN, 0.58, 20, 88);
   const siteSize = oneLine >= 56 ? oneLine : Math.min(56, fitFont(siteKey, LEFT_COLUMN * 2, 0.58, 30, 88));
   const siteWraps = [...siteKey].length * 0.58 * siteSize > LEFT_COLUMN;
-  const label = truncate(cardText(props.label), 88);
-  const roast = truncate(cardText(props.roast), 150);
+  const tldr = truncate(cardText(props.tldr), 220);
   const scoreSize = props.score >= 1000 ? 178 : 220;
 
   return (
@@ -158,35 +155,15 @@ export function EntryCard(props: EntryCardProps) {
           </div>
           <div
             style={{
-              display: "flex",
-              alignSelf: "flex-start",
-              marginTop: 20,
-              padding: "8px 14px",
-              backgroundColor: JEV,
-              border: `4px solid ${INK}`,
-              boxShadow: `5px 5px 0 ${INK}`,
-              fontFamily: OG_FONT.mono,
-              fontWeight: 700,
-              fontSize: 25,
-              lineHeight: 1.3,
-              transform: "rotate(-1deg)",
-              maxWidth: LEFT_COLUMN - 10,
-            }}
-          >
-            {`“${label}”`}
-          </div>
-          <div
-            style={{
               display: "block",
               marginTop: 22,
               fontWeight: 500,
-              fontSize: 26,
+              fontSize: 28,
               lineHeight: 1.3,
-              color: INK_SOFT,
-              lineClamp: siteWraps ? 2 : 3,
+              lineClamp: siteWraps ? 3 : 4,
             }}
           >
-            {`“${roast}”`}
+            {tldr}
           </div>
         </div>
 

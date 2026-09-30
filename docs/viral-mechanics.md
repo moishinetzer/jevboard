@@ -1,5 +1,9 @@
 # Jevboard viral mechanics research
 
+> Update, 2026-09-30: Jevboard became a single page (the form, then the leaderboard). The Tape, TV mode, the Hall of
+> Fame & Shame, live counters and the hyphenated verdict labels described below were removed; views over time took
+> their place. The research stands as background.
+
 Researched 2026-09-29 using live web search. Figures for 2026 events are mostly what founders reported, repeated by secondary sources. Nobody has audited them, and different snapshots disagree (see the notes under each case).
 
 ## TL;DR

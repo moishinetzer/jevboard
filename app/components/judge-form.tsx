@@ -16,7 +16,7 @@ const CHECKING_LINES = [
 ];
 
 /**
- * "Get judged — $5" / "Demand a retrial — $5".
+ * "Add my business · $5" / "Rejudge · $5".
  *
  * Posts to /judge with a fetcher: validation errors render inline, success
  * redirects to checkout. Pass `siteUrl` to render a one-click retrial button
@@ -24,12 +24,14 @@ const CHECKING_LINES = [
  */
 export function JudgeForm({
   siteUrl,
+  newSite = false,
   size = "lg",
   autoFocus = false,
   className,
 }: {
-  /** When set, the form is a retrial button for this URL (no input). */
+  /** When set, the form is a one-click button for this URL (no input): a rejudge, or with `newSite` a first judgment. */
   siteUrl?: string;
+  newSite?: boolean;
   size?: "lg" | "md";
   autoFocus?: boolean;
   className?: string;
@@ -45,13 +47,14 @@ export function JudgeForm({
     return () => clearInterval(id);
   }, [busy]);
 
-  const isRetrial = siteUrl !== undefined;
-  const label = isRetrial ? "Demand a retrial — $5" : "Get judged — $5";
+  const isRetrial = siteUrl !== undefined && !newSite;
+  const oneClick = siteUrl !== undefined;
+  const label = isRetrial ? "Rejudge · $5" : oneClick ? `Add ${siteUrl} · $5` : "Add my business · $5";
   const big = size === "lg";
 
   return (
     <fetcher.Form method="post" action="/judge" className={className}>
-      {isRetrial ? (
+      {oneClick ? (
         <input type="hidden" name="url" value={siteUrl} />
       ) : (
         <div className={`flex flex-col gap-3 ${big ? "sm:flex-row" : ""}`}>
@@ -81,8 +84,8 @@ export function JudgeForm({
           </button>
         </div>
       )}
-      {isRetrial ? (
-        <button type="submit" disabled={busy} className={`btn btn-hot ${big ? "px-6 py-4 text-lg" : "px-4 py-2.5"}`}>
+      {oneClick ? (
+        <button type="submit" disabled={busy} className={`btn ${isRetrial ? "btn-hot" : ""} ${big ? "px-6 py-4 text-lg" : "px-4 py-2.5"}`}>
           {busy ? "Checking…" : label}
         </button>
       ) : null}

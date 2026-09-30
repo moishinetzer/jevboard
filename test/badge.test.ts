@@ -15,7 +15,6 @@ const entry = {
   score: 812,
   rank: 14,
   total: 931,
-  label: "genuinely-useful-but-dressed-like-a-2019-saas",
 };
 
 /** Width/height attributes on the root <svg>. */
@@ -142,25 +141,19 @@ describe("buildBadge", () => {
     assertBalanced(compact);
   });
 
-  it("has a big card variant with rank, score and the verdict label", () => {
+  it("has a big card variant with rank, score and tier", () => {
     const big = buildBadge(entry, { style: "big", theme: "dark" });
     expect(size(big)).toEqual(BIG_BADGE_SIZE);
     expect(big).toContain(">812</text>");
     expect(big).toContain(">#14 of 931</text>");
     expect(big).toContain(">GENUINELY USEFUL</text>");
-    expect(big).toContain("“genuinely-useful-but-dressed-like-a-2019-saas”");
+    expect(big).toContain("Judged by Jev on Jevboard");
     assertBalanced(big);
-  });
-
-  it("truncates very long verdict labels in the big card", () => {
-    const big = buildBadge({ ...entry, label: "a-".repeat(80) + "end" }, { style: "big" });
-    expect(big).toContain("…”".slice(0, 1));
-    expect(big).not.toContain("end”");
   });
 
   it("escapes hostile text everywhere it is interpolated", () => {
     const hostile = `"><script>alert(1)</script>&`;
-    const svg = buildBadge({ ...entry, siteKey: hostile, label: hostile }, { style: "big", href: `https://j.test/s/${hostile}` });
+    const svg = buildBadge({ ...entry, siteKey: hostile }, { style: "big", href: `https://j.test/s/${hostile}` });
     expect(svg).not.toContain("<script>");
     expect(svg).toContain("&lt;script&gt;");
     expect(svg).toContain('href="https://j.test/s/&quot;&gt;&lt;script&gt;');

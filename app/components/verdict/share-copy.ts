@@ -15,7 +15,6 @@ export interface ShareFacts {
   readonly score: number;
   readonly rank: number;
   readonly total: number;
-  readonly label: string;
   /** Absolute URL of the verdict page. */
   readonly url: string;
   readonly rolls?: number;
@@ -33,7 +32,7 @@ export interface ShareMessage {
 
 const defendantBody = (f: ShareFacts): string => {
   if (f.rank === 1) {
-    return `Jev ranks ${f.siteKey} #1 of ${f.total} on Jevboard: ${f.score}/1000, '${f.label}'. Dethrone us if you can:`;
+    return `Jev ranks ${f.siteKey} #1 of ${f.total} on Jevboard with ${f.score}/1000. Dethrone us if you can:`;
   }
   if (f.duelWonAgainst) {
     return `Tied at ${f.score}. Jev put us in the Duel Pit with ${f.duelWonAgainst}. We won.`;
@@ -43,16 +42,15 @@ const defendantBody = (f: ShareFacts): string => {
     return `${retrials} retrials later, Jev finally respects us: ${f.previousScore} → ${f.score}.`;
   }
   if (isHighScore(f.score)) {
-    return `Jev rated ${f.siteKey} ${f.score}/1000 (#${f.rank} of ${f.total}). Apparently we're '${f.label}'. Come at us:`;
+    return `Jev rated ${f.siteKey} ${f.score}/1000 (#${f.rank} of ${f.total}). Come at us:`;
   }
-  return `Paid $5 to have an AI tell me my startup is '${f.label}'. ${f.score}/1000. Worth it.`;
+  return `Paid $5 to have an AI judge how useful my business is. ${f.score}/1000. Worth it.`;
 };
 
 const spectatorBody = (f: ShareFacts): string => {
-  if (f.rank === 1) return `${f.siteKey} is #1 on Jevboard with ${f.score}/1000. Jev calls it '${f.label}'.`;
-  if (isHighScore(f.score))
-    return `Jev rated ${f.siteKey} ${f.score}/1000 (#${f.rank} of ${f.total}): '${f.label}'. Agree?`;
-  return `Jev just called ${f.siteKey} '${f.label}'. ${f.score}/1000. Brutal.`;
+  if (f.rank === 1) return `${f.siteKey} is #1 on Jevboard with ${f.score}/1000.`;
+  if (isHighScore(f.score)) return `Jev rated ${f.siteKey} ${f.score}/1000 (#${f.rank} of ${f.total}). Agree?`;
+  return `Jev just scored ${f.siteKey} ${f.score}/1000. Brutal.`;
 };
 
 export const shareMessage = (facts: ShareFacts, voice: ShareVoice): ShareMessage => {

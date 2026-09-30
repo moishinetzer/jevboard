@@ -349,7 +349,7 @@ export function AwaitingPayment({ orderId, simulated }: { orderId: string; simul
           </div>
           <p className="mt-5 text-sm text-ink-soft">
             Closed the checkout by accident?{" "}
-            <Link to="/#judge" className="font-bold underline">
+            <Link to="/#add" className="font-bold underline">
               Start over
             </Link>
             . Nothing is charged until checkout completes.

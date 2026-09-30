@@ -73,7 +73,8 @@ describe("Pipeline", () => {
 
       const board = yield* Board;
       const c = yield* board.getBySiteKey("c.com");
-      const duels = yield* board.duelsForEntry(c.id, 10);
+      const [latest] = yield* board.judgments(c.id);
+      const duels = yield* board.duelsForJudgment(latest!.id);
       assert.strictEqual(duels.length, 1);
       assert.strictEqual(duels[0]!.winnerId, c.id);
       assert.strictEqual(duels[0]!.opponentSiteKey, "a.com");
@@ -123,9 +124,6 @@ describe("Pipeline", () => {
       const events = yield* board.events({ limit: 20 });
       assert.isTrue(events.some((event) => event.kind === "dethroned" && event.siteKey === "x.com"));
       assert.isTrue(events.some((event) => event.kind === "crowned" && event.siteKey === "y.com"));
-      const hall = yield* board.hall;
-      assert.strictEqual(hall.biggestDrops[0]?.siteKey, "x.com");
-      assert.strictEqual(hall.reigns.length, 2);
     }).pipe(Effect.provide(makeTestLayer(s)));
   });
 

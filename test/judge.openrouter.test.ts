@@ -106,7 +106,6 @@ const verdictJson = {
   tldr: "Invoicing app for plumbers.",
   category: "SaaS",
   score: 612,
-  label: "Boring In The Way Accountants Love!",
   verdict: "Invoices for plumbers, priced on the page. Jev is almost disappointed.",
   reasoning: "Clear product, clear customer, visible pricing.",
   subscores: { clarity: 80, demand: 70, originality: 40, trust: 60, wouldJevPay: 55 },
@@ -136,8 +135,8 @@ const ok = completion(JSON.stringify(verdictJson));
 
 const duelInput: DuelInput = {
   score: 512,
-  a: { siteKey: "a.com", name: "Alpha", label: "a", tldr: "A.", category: "SaaS", reasoning: "A.", strengths: [], weaknesses: [] },
-  b: { siteKey: "b.com", name: "Beta", label: "b", tldr: "B.", category: "AI", reasoning: "B.", strengths: [], weaknesses: [] },
+  a: { siteKey: "a.com", name: "Alpha", tldr: "A.", category: "SaaS", reasoning: "A.", strengths: [], weaknesses: [] },
+  b: { siteKey: "b.com", name: "Beta", tldr: "B.", category: "AI", reasoning: "B.", strengths: [], weaknesses: [] },
 };
 
 // ---------------------------------------------------------------------------
@@ -196,7 +195,6 @@ describe("OpenRouterJudge verdicts", () => {
       assert.strictEqual(result.model, "acme/cheap-model-20260901");
       assert.strictEqual(result.verdict.score, 612);
       assert.strictEqual(result.verdict.name, "Acme Invoicing");
-      assert.strictEqual(result.verdict.label, "boring-in-the-way-accountants-love");
       assert.deepStrictEqual(result.verdict.strengths, ["Clear pricing", "Mobile first", "Fast"]);
       // The quote is in the snapshot (curly quotes are forgiven); the invented claim is dropped.
       assert.deepStrictEqual(result.verdict.receipts, ["“Plans from $12/month.”"]);

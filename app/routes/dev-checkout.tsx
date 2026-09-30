@@ -63,7 +63,7 @@ export default function DevCheckout({ loaderData }: Route.ComponentProps) {
           <JevFace size={44} />
         </div>
         <h1 className="mt-6 font-display text-4xl uppercase">
-          {order.kind === "reroll" ? "Demand a retrial" : "Get judged"}
+          {order.kind === "reroll" ? "Rejudge" : "Add my business"}
         </h1>
         <p className="mt-1 font-mono text-lg">{order.siteKey}</p>
         <div className="mt-6 flex items-baseline justify-between border-t-2 border-dashed border-line pt-4">

@@ -76,6 +76,10 @@ export interface Jevboard {
   readonly order: (orderId: string) => Promise<OrderRow | null>;
   /** True once the checkout simulator recorded a payment for the order. */
   readonly simulatorPaid: (orderId: string) => Promise<boolean>;
+  /** A board entry's current score and roll count, or null when the site isn't on the board. */
+  readonly entry: (siteKey: string) => Promise<{ readonly score: number; readonly rolls: number } | null>;
+  /** All views recorded for a site key ('' is the board as a whole). */
+  readonly views: (siteKey: string) => Promise<number>;
   /** Outbound requests to OpenRouter or Autumn that were refused (should stay empty). */
   readonly forbiddenCalls: ReadonlyArray<string>;
   /** The Worker's most recent log lines, for failure messages. */
@@ -182,6 +186,14 @@ export const startJevboard = async (): Promise<Jevboard> => {
           .first<OrderRow>(),
       simulatorPaid: async (orderId) =>
         (await env.DB.prepare("SELECT 1 AS paid FROM fake_payments WHERE order_id = ?").bind(orderId).first()) !== null,
+      entry: (siteKey) =>
+        env.DB.prepare("SELECT score, rolls FROM entries WHERE site_key = ?")
+          .bind(siteKey)
+          .first<{ score: number; rolls: number }>(),
+      views: async (siteKey) =>
+        (await env.DB.prepare("SELECT COALESCE(SUM(count), 0) AS views FROM views WHERE site_key = ?")
+          .bind(siteKey)
+          .first<number>("views")) ?? 0,
       forbiddenCalls,
       recentLogs,
       close,

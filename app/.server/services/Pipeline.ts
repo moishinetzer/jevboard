@@ -29,7 +29,6 @@ const transientRetry = Schedule.max([Schedule.exponential("1 second").pipe(Sched
 const contenderFromVerdict = (siteKey: string, verdict: Verdict): DuelContender => ({
   siteKey,
   name: verdict.name,
-  label: verdict.label,
   tldr: verdict.tldr,
   category: verdict.category,
   reasoning: verdict.reasoning,

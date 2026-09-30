@@ -65,7 +65,7 @@ export default function Faq({ loaderData }: Route.ComponentProps) {
           <div className="mt-6 hidden border-t-2 border-line pt-4 text-sm lg:block">
             <p className="font-bold">Still confused?</p>
             <p className="mt-1 text-ink-soft">Jev recommends getting judged. It clears things up.</p>
-            <Link to="/#judge" className={`btn mt-3 px-4 py-2 text-sm ${focusRing}`}>
+            <Link to="/#add" className={`btn mt-3 px-4 py-2 text-sm ${focusRing}`}>
               Get judged — $5
             </Link>
           </div>

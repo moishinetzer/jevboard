@@ -19,17 +19,6 @@ const hash = (input: string): number => {
 
 const pick = <A>(items: ReadonlyArray<A>, seed: number): A => items[Math.abs(Math.trunc(seed)) % items.length]!;
 
-const LABELS = [
-  "genuinely-useful-but-dressed-like-a-2019-saas",
-  "another-ai-wrapper-with-a-waitlist-and-a-gradient",
-  "quietly-competent-and-allergic-to-marketing",
-  "solves-a-real-problem-with-too-many-buzzwords",
-  "the-landing-page-is-doing-all-the-heavy-lifting",
-  "surprisingly-essential-once-you-find-the-pricing",
-  "a-vitamin-cosplaying-as-a-painkiller",
-  "useful-for-exactly-the-people-who-built-it",
-];
-
 const ROASTS = [
   "Jev read the whole homepage and only found the word 'seamless' four times. Restraint, almost.",
   "It does a real thing for real people, which already beats half the docket.",
@@ -85,7 +74,6 @@ export const makeMockVerdict = (siteKey: string, snapshot: SiteSnapshot, roll: n
       `${name} is a website Jev visited. It exists, and it would like you to know about it.`,
     category: categoryFor(snapshot, seed),
     score,
-    label: pick(LABELS, seed >>> 3),
     verdict: pick(ROASTS, seed >>> 5),
     reasoning: `Mock Jev skimmed ${snapshot.pages.length} page(s) of ${siteKey}. The score is a deterministic placeholder — set OPENROUTER_API_KEY for the real Jev.`,
     subscores: {

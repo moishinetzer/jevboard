@@ -13,6 +13,8 @@ const CANCELLED_SITE = "example.net"; // checkout cancelled, never judged
 const CLOSED_TAB_SITE = "example.org"; // paid, tab closed, confirmed by the cron
 
 let jev: Jevboard;
+/** The visitor who paid for SITE: only they get its "Rejudge" button. */
+let submitter: Browser;
 
 beforeAll(async () => {
   jev = await startJevboard();
@@ -60,14 +62,23 @@ const waitForVerdict = (browser: Browser, orderId: string) =>
     return title.includes("Jev has spoken") ? page : undefined;
   });
 
-/** Score and roll count from a verdict page (/s/<site>). */
-const verdictOf = (page: Visit, site: string) => {
-  const score = /^(\S+) — (\d+)\/1000 on Jevboard$/.exec(titleOf(page.html));
-  expect(score?.[1], `verdict page title: ${titleOf(page.html)}`).toBe(site);
-  const rolls = /\b(\d+) rolls? · /.exec(textOf(page.html));
-  expect(rolls, "roll count on the verdict page").not.toBeNull();
-  return { score: Number(score?.[2]), rolls: Number(rolls?.[1]) };
+/**
+ * /s/<site> is the board with that business opened in place: its score from the
+ * title, with the details section rendered, and its roll count from D1.
+ */
+const verdictOf = async (page: Visit, site: string) => {
+  const score = /: (\d+)\/1000 on Jevboard$/.exec(titleOf(page.html));
+  expect(score, `verdict page title: ${titleOf(page.html)}`).not.toBeNull();
+  expect(page.html).toContain('aria-expanded="true"');
+  expect(textOf(page.html)).toContain("Why this score");
+  const entry = await jev.entry(site);
+  expect(entry, `${site} on the board`).not.toBeNull();
+  expect(entry?.score).toBe(Number(score?.[1]));
+  return { score: Number(score?.[1]), rolls: entry?.rolls ?? 0 };
 };
+
+/** The hidden URL field of the one-click "Rejudge" form, if the page has one. */
+const rejudgeUrlOf = (page: Visit) => /<input type="hidden" name="url" value="([^"]+)"/.exec(page.html)?.[1];
 
 describe("Jevboard Worker (simulated payments, mock Jev)", () => {
   it("GET /healthz reports ok", async () => {
@@ -78,6 +89,7 @@ describe("Jevboard Worker (simulated payments, mock Jev)", () => {
 
   it("happy path: submit from the home page, pay in the simulator, get judged, land on the board", async () => {
     const browser = await newVisitor();
+    submitter = browser;
     const { checkout, orderId } = await submitForCheckout(browser, { url: `https://${SITE}` });
     expect(textOf(checkout.html)).toContain(SITE);
     expect(await jev.order(orderId)).toMatchObject({ status: "pending_payment", kind: "new", paidAt: null });
@@ -94,7 +106,7 @@ describe("Jevboard Worker (simulated payments, mock Jev)", () => {
 
     const entry = await browser.get(`/s/${SITE}`);
     expect(entry.status).toBe(200);
-    const verdict = verdictOf(entry, SITE);
+    const verdict = await verdictOf(entry, SITE);
     expect(verdict.score).toBe(Number(announced?.[1]));
     expect(verdict.score).toBeGreaterThanOrEqual(1);
     expect(verdict.score).toBeLessThanOrEqual(1000);
@@ -111,23 +123,33 @@ describe("Jevboard Worker (simulated payments, mock Jev)", () => {
     expect(rows.some((row) => row.includes(`>${verdict.score}<`))).toBe(true);
   });
 
-  it("reroll: demanding a retrial from the verdict page adds a roll", async () => {
-    const browser = await newVisitor();
-    const entry = await browser.get(`/s/${SITE}`);
-    const before = verdictOf(entry, SITE);
+  it("only the submitter sees the Rejudge button on their business", async () => {
+    const stranger = await newVisitor();
+    const seen = await stranger.get(`/s/${SITE}`);
+    await verdictOf(seen, SITE);
+    expect(rejudgeUrlOf(seen)).toBeUndefined();
+    expect(seen.html).not.toContain(">Rejudge · $5<");
 
-    // The "Demand a retrial — $5" button posts the site's URL from a hidden field.
-    const siteUrl = /<input type="hidden" name="url" value="([^"]+)"/.exec(entry.html)?.[1];
+    expect(rejudgeUrlOf(await submitter.get(`/s/${SITE}`))).toBe(`https://${SITE}/`);
+  });
+
+  it("reroll: the submitter's Rejudge button adds a roll", async () => {
+    const browser = submitter;
+    const entry = await browser.get(`/s/${SITE}`);
+    const before = await verdictOf(entry, SITE);
+
+    // "Rejudge · $5" posts the site's URL from a hidden field.
+    const siteUrl = rejudgeUrlOf(entry);
     expect(siteUrl).toBe(`https://${SITE}/`);
     const { checkout, orderId } = await submitForCheckout(browser, { url: siteUrl ?? "" });
-    expect(textOf(checkout.html)).toContain("Demand a retrial");
+    expect(textOf(checkout.html)).toContain("Rejudge");
     expect(await jev.order(orderId)).toMatchObject({ status: "pending_payment", kind: "reroll" });
 
     const judging = await browser.submit(checkout.path, {});
     expect(judging.path).toBe(`/judging/${orderId}`);
     await waitForVerdict(browser, orderId);
 
-    const after = verdictOf(await browser.get(`/s/${SITE}`), SITE);
+    const after = await verdictOf(await browser.get(`/s/${SITE}`), SITE);
     expect(after.rolls).toBe(before.rolls + 1);
   });
 
@@ -183,12 +205,12 @@ describe("Jevboard Worker (simulated payments, mock Jev)", () => {
 
     const entry = await browser.get(`/s/${CLOSED_TAB_SITE}`);
     expect(entry.status).toBe(200);
-    expect(verdictOf(entry, CLOSED_TAB_SITE).rolls).toBe(1);
+    expect((await verdictOf(entry, CLOSED_TAB_SITE)).rolls).toBe(1);
   });
 
   it("public assets: OG card, score badge and sitemap", async () => {
     const browser = new Browser(jev.baseUrl);
-    const { score } = verdictOf(await browser.get(`/s/${SITE}`), SITE);
+    const { score } = await verdictOf(await browser.get(`/s/${SITE}`), SITE);
 
     const og = await fetch(new URL(`/og/${SITE}.png`, jev.baseUrl));
     expect(og.status).toBe(200);
@@ -210,6 +232,28 @@ describe("Jevboard Worker (simulated payments, mock Jev)", () => {
     expect(xml).toContain(`<loc>${jev.baseUrl.origin}/s/${SITE}</loc>`);
     expect(xml).toContain(`<loc>${jev.baseUrl.origin}/s/${CLOSED_TAB_SITE}</loc>`);
     expect(xml).not.toContain(`/s/${CANCELLED_SITE}<`);
+  });
+
+  it("counts a view of the board and of the business when a person opens it, but not for bots", async () => {
+    const person = {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36",
+      "Sec-Fetch-Dest": "document",
+    };
+    const site = await jev.views(CLOSED_TAB_SITE);
+    const board = await jev.views("");
+
+    const page = await fetch(new URL(`/s/${CLOSED_TAB_SITE}`, jev.baseUrl), { headers: person });
+    expect(page.status).toBe(200);
+    expect(textOf(await page.text())).toContain("Views, last 30 days");
+    expect(await jev.views(CLOSED_TAB_SITE)).toBe(site + 1);
+    expect(await jev.views("")).toBe(board + 1);
+
+    // Crawlers and scripts (Node's fetch says "node") don't count.
+    for (const agent of ["Googlebot/2.1 (+http://www.google.com/bot.html)", "node"]) {
+      const bot = await fetch(new URL(`/s/${CLOSED_TAB_SITE}`, jev.baseUrl), { headers: { "User-Agent": agent } });
+      expect(bot.status).toBe(200);
+    }
+    expect(await jev.views(CLOSED_TAB_SITE)).toBe(site + 1);
   });
 
   it("POST /api/autumn/webhook is a 404 without AUTUMN_WEBHOOK_SECRET", async () => {

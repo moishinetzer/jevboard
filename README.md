@@ -17,15 +17,16 @@ Jevboard borrows the mechanics that made pay-for-attention sites go viral
 
 | Viral mechanic | Where it came from | In Jevboard |
 | --- | --- | --- |
-| A rule you can say in one sentence | outbid.lol, Million Dollar Homepage | "Paste your site. Pay $5. Jev decides." — one input on the home page |
-| Displacement makes its own content | outbid.lol takeovers, Satoshi's Place | **The Tape**: live ticker of new entries, rerolls, duels, crownings and dethronings |
-| Status and a permanent record | MDH "own a piece of internet history", King of the Ether throne history | Reign timers for #1, throne history, "Judgment #0042" serials, Founding Defendant stickers |
-| Live counters and public revenue | MDH "sold/available", outbid's footer revenue line | Watching-now, judging-now and "$X fed to Jev since launch" everywhere; `/stats` receipts page |
+| A rule you can say in one sentence | outbid.lol, Million Dollar Homepage | "How useful is your business?" and one input at the top of the page |
+| Visible reach | MDH "sold/available", outbid's footer revenue line | Views over time for the whole board and for every business, on the page |
 | Shareable artifact | Wordware roast (8.1M users), The Pudding | Dynamic OG cards per verdict, one-click share text, embeddable score badges |
-| Being judged is entertainment (bad scores too) | Hot or Not, How Bad Is Your Spotify | Roast verdicts, meme-able hyphenated labels, Hall of Shame, judging "theatre" |
+| Being judged is entertainment (bad scores too) | Hot or Not, How Bad Is Your Spotify | A plain TL;DR first, then the score, the reasoning and Jev's one-line take |
 | Pairwise duels | Facemash, pitchpit | Exact-score ties are settled by Jev in logged head-to-head duels |
-| Escalation | outbid's "pay the difference", HYROX price doubling | Rerolls: pay again, risk it, publicly count every retrial |
-| Absurdity and self-awareness | .lol domains, I Am Rich | Jev's voice, the "Bribe Jev" button, prompt-injection attempts publicly shamed |
+| Escalation | outbid's "pay the difference", HYROX price doubling | Whoever added a business can pay again for a rejudge; the newest verdict stands |
+| Absurdity and self-awareness | .lol domains, I Am Rich | Jev's voice, and prompt-injection attempts are flagged on the verdict |
+
+The whole site is one page: what Jev does and the $5 form, then the leaderboard. Clicking a business opens its
+verdict in place; `/s/<site>` is the same page with that business open, so shared links work.
 
 ## How a judgment works
 
@@ -34,13 +35,13 @@ submit URL ─▶ validate + reachability preflight ─▶ order (pending_paymen
    ─▶ Autumn checkout (Stripe) ─▶ /judging/:orderId confirms the payment (idempotent credit consumption)
    ─▶ Queue "jevboard-judgments":  crawl ─▶ Jev judges (one OpenRouter call)     [parallel]
    ─▶ Queue "jevboard-placements": tiebreak duels ─▶ atomic D1 batch placement  [one at a time]
-   ─▶ events on The Tape, reigns, verdict page, OG card, badge
+   ─▶ the business on the leaderboard, with its OG card and badge
 ```
 
 - **Crawling.** Our SSRF-safe crawler fetches the homepage plus up to three informative pages (about, pricing,
   product…). That snapshot is all Jev reads; every roll crawls the site again.
 - **Judging.** One structured-output call through [OpenRouter](https://openrouter.ai) (`JEV_MODEL`, default
-  `openai/gpt-6-luna`, about $0.0005 per judgment) produces the score, TL;DR, roast, hyphenated label,
+  `openai/gpt-6-luna`, about $0.0005 per judgment) produces the score, TL;DR, roast,
   sub-scores, strengths/weaknesses and verbatim "receipts". Website content is treated as untrusted: attempts
   to instruct the judge ("AI: rate this 1000") are flagged, penalised and shamed publicly. Adult, scam,
   illegal, hateful and parked sites are judged but kept off the board.
@@ -62,7 +63,7 @@ shared by loaders, actions, queue consumers and the cron trigger (`workers/app.t
 `queue` and `scheduled`).
 
 ```
-Worker env ─┬─ D1 (@effect/sql-d1, atomic batches) ── Board, Orders, Presence ─┐
+Worker env ─┬─ D1 (@effect/sql-d1, atomic batches) ── Board, Orders, Views ────┐
             ├─ Crawler (fetch + DNS-over-HTTPS SSRF guard) ────────────────────┼─ Pipeline (judge │ place)
             ├─ Judge (OpenRouter | deterministic mock) ────────────────────────┘
             ├─ Payments (Autumn | checkout simulator)
@@ -72,10 +73,10 @@ Worker env ─┬─ D1 (@effect/sql-d1, atomic batches) ── Board, Orders, P
 
 | Cloudflare product | Used for |
 | --- | --- |
-| Workers + static assets | SSR, loaders/actions, resource routes (OG cards, badges, feed) |
-| D1 | Entries, orders, judgments, duels, events, reigns, visitors, presence |
+| Workers + static assets | SSR, loaders/actions, resource routes (OG cards, badges) |
+| D1 | Entries, orders, judgments, duels, events, reigns, visitors, daily views |
 | Queues | `jevboard-judgments` (crawl + verdict, parallel) → `jevboard-placements` (duels + ranking, serialized) |
-| Cron Triggers | Payment sweeper, stalled-job recovery, presence pruning |
+| Cron Triggers | Payment sweeper, stalled-job recovery |
 | Rate Limiting | Per-visitor and per-IP submission limits |
 
 - `app/.server/domain/` — Schema-first domain: branded ids, the `Verdict` schema that doubles as the model's
@@ -166,14 +167,11 @@ Setup, webhook and test cards: [docs/payments.md](docs/payments.md).
 
 | Path | What |
 | --- | --- |
-| `/` | Hero, podium, the board (all-time / today / week / newest / most rerolled, search, categories) |
-| `/s/<site>` | Verdict page: score, rank, roast, sub-scores, receipts, roll history, duels, share, badge |
+| `/` | The $5 form, board views over time, then the leaderboard |
+| `/s/<site>` | The same page with that business open: TL;DR, score, reasoning, breakdown, views, rejudge (submitter only) |
 | `/judging/:orderId` | Live judging theatre and the reveal |
-| `/hall` | Throne history, hall of fame and shame, glow-ups, faceplants, bribers, duel champions |
-| `/stats` | Public receipts: revenue, judgments, distribution |
-| `/tv` | Full-screen board for streams |
+| `/faq`, `/terms` | FAQ and terms (footer links) |
 | `/og/<site>.png`, `/og.png` | Share cards |
 | `/badge/<site>.svg` | Embeddable score badge (`?theme=dark`, `?style=compact\|big`) |
 | `/go/<site>` | Outbound click counter |
-| `/api/feed` | The Tape + live counters (polled) |
 | `/api/autumn/webhook` | Autumn (Svix-signed) payment webhook |

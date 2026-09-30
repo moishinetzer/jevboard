@@ -15,12 +15,12 @@ import { JudgeLive } from "./services/judge/JudgeLive";
 import { Orders } from "./services/Orders";
 import { PaymentsLive } from "./services/payments/PaymentsLive";
 import { Pipeline } from "./services/Pipeline";
-import { Presence } from "./services/Presence";
+import { Views } from "./services/Views";
 
 /**
  * The whole backend as one layer graph, running on Cloudflare Workers:
  *
- *   Worker env ─┬─ D1 (SqlClient, atomic batches) ── Board, Orders, Presence ─┐
+ *   Worker env ─┬─ D1 (SqlClient, atomic batches) ── Board, Orders, Views ────┐
  *               ├─ Crawler ────────────────────────────────────────────────────┼─ Pipeline
  *               ├─ Judge (OpenRouter | mock) ──────────────────────────────────┘
  *               ├─ Payments (Autumn | simulator)
@@ -36,11 +36,11 @@ const Database = SqlBatchD1.pipe(Layer.provideMerge(D1Live));
 const Services = Layer.mergeAll(
   Board.layer,
   Orders.layer,
-  Presence.layer,
   CrawlerLive,
   JudgeLive,
   PaymentsLive,
   RateLimiterCloudflare,
+  Views.layer,
 ).pipe(Layer.provideMerge(Database));
 
 const Jobs = Layer.mergeAll(Pipeline.layer, JudgmentQueueCloudflare).pipe(Layer.provideMerge(Services));

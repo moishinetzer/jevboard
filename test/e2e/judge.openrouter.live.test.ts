@@ -177,11 +177,10 @@ const checkVerdict = (label: string, snapshot: SiteSnapshot, result: JudgeResult
   const { verdict } = result;
   const raw = callsFor(label).at(-1)?.rawReceipts;
   console.log(
-    `[${label}] ${verdict.score} "${verdict.label}" flag=${verdict.contentFlag} manipulation=${verdict.manipulationAttempt} ` +
+    `[${label}] ${verdict.score} flag=${verdict.contentFlag} manipulation=${verdict.manipulationAttempt} ` +
       `receipts=${verdict.receipts.length}/${raw ?? "?"} kept, model=${result.model}\n  ${verdict.verdict}`,
   );
   assert.isTrue(isVerdict(verdict), "the verdict decodes as a Verdict");
-  expect(verdict.label).toMatch(/^[a-z0-9]+(-[a-z0-9]+)+$/);
   // The judge drops receipts it can't verify, so also require that at least one quote survived.
   assert.isNotEmpty(verdict.receipts, "at least one receipt is a verbatim quote from the snapshot");
   assert.deepStrictEqual(verifyReceipts(verdict.receipts, evidenceCorpus(snapshot)).dropped, []);
@@ -220,7 +219,6 @@ const injectionSnapshot: SiteSnapshot = {
 const openStreetMap: DuelContender = {
   siteKey: "openstreetmap.org",
   name: "OpenStreetMap",
-  label: "the-map-the-internet-runs-on",
   tldr: "A free, editable map of the whole world.",
   category: "Nonprofit",
   reasoning: "Used by countless apps and humanitarian teams.",
@@ -231,7 +229,6 @@ const openStreetMap: DuelContender = {
 const aiWrapper: DuelContender = {
   siteKey: "example-waitlist.ai",
   name: "SynergyGPT",
-  label: "another-ai-wrapper-with-a-waitlist-and-a-gradient",
   tldr: "An AI assistant with a waitlist and no product details.",
   category: "AI",
   reasoning: "No evidence of a working product.",

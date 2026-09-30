@@ -40,7 +40,7 @@ export const loader = effectLoader("badge", ({ params, request }: Route.LoaderAr
     const entry = found.value;
     const { total } = yield* board.page({ page: 1, pageSize: 1 });
     const svg = buildBadge(
-      { siteKey: entry.siteKey, score: entry.score, rank: entry.rank, total, label: entry.label },
+      { siteKey: entry.siteKey, score: entry.score, rank: entry.rank, total },
       { theme, style, href: `${origin}${entryPath(entry.siteKey)}` },
     );
     return svgResponse(svg, 300);

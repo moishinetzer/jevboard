@@ -56,22 +56,20 @@ export const FAQ: ReadonlyArray<FaqGroup> = [
           "Yes. Jev doesn't remember you, probably.",
           "Every retrial re-crawls your site and judges it from scratch, and the newest verdict stands even when it's lower. Your score can go up. It can also go down. That's the point.",
         ],
-        links: [{ to: "/hall#retrials", label: "See the biggest glow-ups and faceplants" }],
       },
       {
         id: "ties",
         question: "What happens on a tie?",
         answer: [
           "Jev doesn't do draws. If your score exactly matches another site's, you both go into the Duel Pit: Jev compares the two head-to-head and picks a winner, with a one-line reason.",
-          "It repeats until every tied site has its own place. Every duel is public, on both verdict pages.",
+          "It repeats until every tied site has its own place.",
         ],
-        links: [{ to: "/hall#duels", label: "Duel Pit champions" }],
       },
       {
         id: "public",
         question: "Is my verdict public?",
         answer: [
-          "Yes. Every verdict gets a public page, a share card and an embeddable badge. That's the whole idea: you can't buy #1, but you can show off your number. Or hide it and pretend this never happened. Jev will know.",
+          "Yes. Every business on the board is public: anyone can open its verdict, and each one has a share link and a share card. That's the whole idea: you can't buy #1, but you can show off your number.",
         ],
       },
     ],
@@ -85,7 +83,7 @@ export const FAQ: ReadonlyArray<FaqGroup> = [
         question: "Can I pay more to rank higher?",
         answer: [
           "No. $5 buys a judgment, not a result.",
-          "You can demand as many retrials as you like, but each one costs the same $5, is judged from scratch, and the newest verdict is final. You can't buy #1. You can only buy Jev's attention.",
+          "Whoever added a business can ask for a rejudge as often as they like, but each one costs the same $5, is judged from scratch, and the newest verdict is final. You can't buy #1. You can only buy Jev's attention.",
         ],
       },
       {
@@ -109,9 +107,8 @@ export const FAQ: ReadonlyArray<FaqGroup> = [
         id: "advertising",
         question: "Is this real advertising?",
         answer: [
-          "Sort of. Every listing links to your site, and Jev shows how many visitors it sent you. What you can't buy is placement: the order of the board is Jev's opinion, not the highest bidder's.",
+          "Sort of. Every listing links to your site and shows how many people viewed it. What you can't buy is placement: the order of the board is Jev's opinion, not the highest bidder's.",
         ],
-        links: [{ to: "/stats", label: "Clicks sent so far" }],
       },
     ],
   },
@@ -124,9 +121,8 @@ export const FAQ: ReadonlyArray<FaqGroup> = [
         question: "Can I trick Jev with hidden instructions on my site?",
         answer: [
           "You can try. Jev reads hidden text too.",
-          "Pages that try to instruct, flatter or bribe an AI judge (say, white-on-white text begging for a 1000) get a permanent 🚨 stamp on their verdict and a spot in the Hall of Shame. Jev judges the site anyway, minus the bump you were hoping for.",
+          "Pages that try to instruct, flatter or bribe an AI judge (say, white-on-white text begging for a 1000) get a permanent 🚨 stamp on their verdict. Jev judges the site anyway, minus the bump you were hoping for.",
         ],
-        links: [{ to: "/hall#bribes", label: "Caught bribing Jev" }],
       },
       {
         id: "declined",

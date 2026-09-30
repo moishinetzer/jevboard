@@ -128,10 +128,6 @@ export const Verdict = Schema.Struct({
   score: Score.annotate({
     description: "How useful this business is, from 1 (useless) to 1000 (civilization-level essential). Use the whole range and exact numbers, not round ones.",
   }),
-  label: Schema.String.annotate({
-    description:
-      "A hyphenated, lowercase, meme-able verdict label of 3-9 words describing the kind of useful it is, e.g. 'genuinely-useful-but-dressed-like-a-2019-saas'.",
-  }),
   verdict: Schema.String.annotate({
     description:
       "Jev's roast: 1-3 witty, specific, slightly savage sentences about the website/business (never about people). Max ~280 characters.",
@@ -168,7 +164,6 @@ export type DuelVerdict = typeof DuelVerdict.Type;
 export interface DuelContender {
   readonly siteKey: string;
   readonly name: string;
-  readonly label: string;
   readonly tldr: string;
   readonly category: string;
   readonly reasoning: string;
@@ -197,7 +192,6 @@ export interface BoardEntry {
   /** Score change caused by the latest roll (0 for first judgments). */
   readonly lastDelta: number;
   readonly manipulationAttempt: boolean;
-  readonly label: string;
   readonly subscores: SubScores;
   readonly ogImage: string | null;
   /** 1-based order in which entries first joined the board ("Founding Defendant" if <= 100). */
@@ -223,7 +217,6 @@ export interface Judgment {
   readonly verdict: string;
   readonly reasoning: string;
   readonly category: string;
-  readonly label: string;
   readonly subscores: SubScores;
   readonly strengths: ReadonlyArray<string>;
   readonly weaknesses: ReadonlyArray<string>;

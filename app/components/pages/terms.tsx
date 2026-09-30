@@ -4,7 +4,7 @@ import { formatMoney, JUDGMENT_PRICE_CENTS } from "~/lib/format";
 import { CONTACT_EMAIL } from "./faq/content";
 import { focusRing } from "./shared";
 
-export const TERMS_UPDATED = "September 29, 2026";
+export const TERMS_UPDATED = "September 30, 2026";
 
 const price = formatMoney(JUDGMENT_PRICE_CENTS);
 
@@ -104,9 +104,8 @@ export const CLAUSES: ReadonlyArray<Clause> = [
     gist: "Verdicts, share cards and badges are meant to be seen.",
     body: (
       <p>
-        A submitted site's address, name, score, rank and verdict are published on Jevboard and may appear in share images, embeddable
-        badges, the live feed and the {link("/hall", "Hall of Fame & Shame")}. Aggregate numbers appear on the{" "}
-        {link("/stats", "Receipts")} page.
+        A submitted site's address, name, score, rank and verdict are published on the Jevboard leaderboard and may appear in share
+        images and embeddable badges, along with how many times its listing was viewed.
       </p>
     ),
   },

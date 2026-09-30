@@ -13,7 +13,6 @@ import {
   type EventKind,
   IN_FLIGHT_STATUSES,
   type Judgment,
-  type Reign,
   type SubScores,
   type Verdict,
 } from "../domain/models";
@@ -31,7 +30,6 @@ interface EntryRow {
   readonly tldr: string;
   readonly verdict: string;
   readonly category: string;
-  readonly label: string;
   readonly subscores: string;
   readonly score: number;
   readonly tieRank: number;
@@ -68,7 +66,6 @@ interface JudgmentRow {
   readonly verdict: string;
   readonly reasoning: string;
   readonly category: string;
-  readonly label: string;
   readonly subscores: string;
   readonly strengths: string;
   readonly weaknesses: string;
@@ -126,7 +123,6 @@ const toBoardEntry = (row: RankedEntryRow): BoardEntry => ({
   worstScore: row.worstScore,
   lastDelta: row.lastDelta,
   manipulationAttempt: row.manipulationAttempt === 1,
-  label: row.label,
   subscores: parseSubScores(row.subscores),
   ogImage: row.ogImage,
   entryNumber: row.entryNumber,
@@ -149,7 +145,6 @@ const toJudgment = (row: JudgmentRow): Judgment => ({
   verdict: row.verdict,
   reasoning: row.reasoning,
   category: row.category,
-  label: row.label,
   subscores: parseSubScores(row.subscores),
   strengths: parseList(row.strengths),
   weaknesses: parseList(row.weaknesses),
@@ -212,16 +207,6 @@ export interface PlacementResult {
   readonly hidden: boolean;
 }
 
-export interface Hall {
-  readonly reigns: ReadonlyArray<Reign>;
-  readonly mostRerolled: ReadonlyArray<BoardEntry>;
-  readonly lowest: ReadonlyArray<BoardEntry>;
-  readonly bribers: ReadonlyArray<BoardEntry>;
-  readonly biggestJumps: ReadonlyArray<Judgment & { readonly siteKey: string }>;
-  readonly biggestDrops: ReadonlyArray<Judgment & { readonly siteKey: string }>;
-  readonly duelChampions: ReadonlyArray<{ readonly siteKey: string; readonly name: string; readonly wins: number; readonly losses: number }>;
-}
-
 export const BOARD_SORTS = ["rank", "today", "week", "newest", "rerolled"] as const;
 export type BoardSort = (typeof BOARD_SORTS)[number];
 
@@ -236,14 +221,6 @@ export interface BoardQuery {
    * newest: most recently judged first. rerolled: most rolls first.
    */
   readonly sort?: BoardSort | undefined;
-}
-
-export interface DailyStat {
-  /** YYYY-MM-DD (UTC) */
-  readonly day: string;
-  readonly judgments: number;
-  readonly rerolls: number;
-  readonly revenueCents: number;
 }
 
 export interface BoardPage {
@@ -275,10 +252,8 @@ export class Board extends Context.Service<
   {
     readonly findBySiteKey: (siteKey: string) => Effect.Effect<Option.Option<BoardEntry>>;
     readonly getBySiteKey: (siteKey: string) => Effect.Effect<BoardEntry, NotFound>;
-    readonly getById: (id: string) => Effect.Effect<BoardEntry, NotFound>;
     readonly page: (options: BoardQuery) => Effect.Effect<BoardPage>;
     readonly top: (limit: number) => Effect.Effect<ReadonlyArray<BoardEntry>>;
-    readonly recent: (limit: number) => Effect.Effect<ReadonlyArray<BoardEntry>>;
     /** Visible entries currently at `score`, best first, excluding the site being placed. */
     readonly tiedGroup: (score: number, excludeSiteKey: string) => Effect.Effect<ReadonlyArray<TiedEntry>>;
     /** The judgment already written for an order, if any (placement idempotency). */
@@ -291,19 +266,11 @@ export class Board extends Context.Service<
     readonly commitPlacement: (input: CommitPlacementInput) => Effect.Effect<PlacementResult>;
     readonly judgments: (entryId: EntryId) => Effect.Effect<ReadonlyArray<Judgment>>;
     readonly judgment: (id: string) => Effect.Effect<Option.Option<Judgment>>;
-    readonly duelsForEntry: (entryId: EntryId, limit: number) => Effect.Effect<ReadonlyArray<Duel>>;
     readonly duelsForJudgment: (judgmentId: string) => Effect.Effect<ReadonlyArray<Duel>>;
     readonly events: (options: { readonly afterId?: number | undefined; readonly limit: number }) => Effect.Effect<ReadonlyArray<BoardEvent>>;
     readonly stats: Effect.Effect<BoardStats>;
-    readonly hall: Effect.Effect<Hall>;
-    /** Entries directly above and below, for "neighbours" on the entry page. */
-    readonly neighbours: (entryId: EntryId, radius: number) => Effect.Effect<ReadonlyArray<BoardEntry>>;
     /** Counts an outbound visit and returns the URL to redirect to. */
     readonly recordClick: (siteKey: string) => Effect.Effect<Option.Option<string>>;
-    /** Per-day judgments, rerolls and revenue for the last `days` days (UTC), oldest first. */
-    readonly daily: (days: number) => Effect.Effect<ReadonlyArray<DailyStat>>;
-    /** Categories that currently have at least one entry, with counts. */
-    readonly categories: Effect.Effect<ReadonlyArray<{ readonly category: string; readonly count: number }>>;
   }
 >()("jevboard/Board") {
   static readonly layer = Layer.effect(
@@ -327,15 +294,6 @@ export class Board extends Context.Service<
           return yield* new NotFound({ what: "entry", message: `Jev hasn't judged ${siteKey} yet.` });
         }
         return entry.value;
-      });
-
-      const getById = Effect.fn("Board.getById")(function* (id: string) {
-        const rows = yield* sql<RankedEntryRow>`WITH ranked AS (${ranked}) SELECT * FROM ranked WHERE id = ${id}`.pipe(
-          Effect.orDie,
-        );
-        const row = rows[0];
-        if (!row) return yield* new NotFound({ what: "entry", message: "No such entry on the board." });
-        return toBoardEntry(row);
       });
 
       const page = Effect.fn("Board.page")(function* (options: BoardQuery) {
@@ -381,16 +339,9 @@ export class Board extends Context.Service<
         return rows.map(toBoardEntry);
       }, Effect.orDie);
 
-      const recent = Effect.fn("Board.recent")(function* (limit: number) {
-        const rows = yield* sql<RankedEntryRow>`
-          WITH ranked AS (${ranked}) SELECT * FROM ranked ORDER BY last_judged_at DESC LIMIT ${limit}`;
-        return rows.map(toBoardEntry);
-      }, Effect.orDie);
-
       const contenderFor = (entry: EntryRow, judgment: JudgmentRow | undefined): DuelContender => ({
         siteKey: entry.siteKey,
         name: entry.name,
-        label: entry.label,
         tldr: entry.tldr,
         category: entry.category,
         reasoning: judgment?.reasoning ?? entry.verdict,
@@ -412,7 +363,6 @@ export class Board extends Context.Service<
             contender: {
               siteKey: row.siteKey,
               name: row.name,
-              label: row.label,
               tldr: row.tldr,
               category: row.category,
               reasoning: row.jReasoning ?? row.verdict,
@@ -514,7 +464,7 @@ export class Board extends Context.Service<
             writes.push(sql`
               UPDATE entries SET
                 url = ${input.url}, host = ${input.host}, name = ${verdict.name}, tldr = ${verdict.tldr},
-                verdict = ${verdict.verdict}, category = ${verdict.category}, label = ${verdict.label},
+                verdict = ${verdict.verdict}, category = ${verdict.category},
                 subscores = ${subscores}, score = ${S},
                 judgment_id = ${judgmentId}, rolls = ${roll},
                 best_score = ${Math.max(existing.bestScore, S)},
@@ -533,7 +483,6 @@ export class Board extends Context.Service<
               tldr: verdict.tldr,
               verdict: verdict.verdict,
               category: verdict.category,
-              label: verdict.label,
               subscores,
               score: S,
               tieRank: 0,
@@ -574,7 +523,6 @@ export class Board extends Context.Service<
             verdict: verdict.verdict,
             reasoning: verdict.reasoning,
             category: verdict.category,
-            label: verdict.label,
             subscores,
             strengths: JSON.stringify(verdict.strengths),
             weaknesses: JSON.stringify(verdict.weaknesses),
@@ -773,14 +721,6 @@ export class Board extends Context.Service<
         JOIN entries c ON c.id = d.challenger_id
         JOIN entries o ON o.id = d.opponent_id`;
 
-      const duelsForEntry = Effect.fn("Board.duelsForEntry")(function* (entryId: EntryId, limit: number) {
-        const rows = yield* sql<DuelRow>`
-          ${duelSelect}
-          WHERE d.challenger_id = ${entryId} OR d.opponent_id = ${entryId}
-          ORDER BY d.created_at DESC LIMIT ${limit}`;
-        return rows.map(toDuel);
-      }, Effect.orDie);
-
       const duelsForJudgment = Effect.fn("Board.duelsForJudgment")(function* (judgmentId: string) {
         const rows = yield* sql<DuelRow>`${duelSelect} WHERE d.judgment_id = ${judgmentId} ORDER BY d.seq ASC`;
         return rows.map(toDuel);
@@ -846,122 +786,28 @@ export class Board extends Context.Service<
         } satisfies BoardStats;
       }).pipe(Effect.orDie, Effect.withSpan("Board.stats"));
 
-      const hall = Effect.gen(function* () {
-        const now = Date.now();
-        const reignRows = yield* sql<{
-          entryId: string;
-          siteKey: string;
-          name: string;
-          startedAt: number;
-          endedAt: number | null;
-        }>`
-          SELECT r.entry_id, e.site_key, e.name, r.started_at, r.ended_at
-          FROM reigns r JOIN entries e ON e.id = r.entry_id
-          WHERE e.hidden = 0
-          ORDER BY (COALESCE(r.ended_at, ${now}) - r.started_at) DESC LIMIT 10`;
-        const reigns = reignRows.map(
-          (row): Reign => ({
-            ...row,
-            entryId: row.entryId as EntryId,
-            durationMs: (row.endedAt ?? now) - row.startedAt,
-          }),
-        );
-        const mostRerolled = yield* sql<RankedEntryRow>`
-          WITH ranked AS (${ranked}) SELECT * FROM ranked WHERE rolls > 1 ORDER BY rolls DESC, rank ASC LIMIT 10`;
-        const lowest = yield* sql<RankedEntryRow>`
-          WITH ranked AS (${ranked}) SELECT * FROM ranked ORDER BY rank DESC LIMIT 10`;
-        const bribers = yield* sql<RankedEntryRow>`
-          WITH ranked AS (${ranked}) SELECT * FROM ranked WHERE manipulation_attempt = 1 ORDER BY last_judged_at DESC LIMIT 10`;
-        const jumps = yield* sql<JudgmentRow & { siteKey: string }>`
-          SELECT j.*, e.site_key FROM judgments j JOIN entries e ON e.id = j.entry_id
-          WHERE e.hidden = 0 AND j.previous_score IS NOT NULL AND j.score > j.previous_score
-          ORDER BY (j.score - j.previous_score) DESC LIMIT 10`;
-        const drops = yield* sql<JudgmentRow & { siteKey: string }>`
-          SELECT j.*, e.site_key FROM judgments j JOIN entries e ON e.id = j.entry_id
-          WHERE e.hidden = 0 AND j.previous_score IS NOT NULL AND j.score < j.previous_score
-          ORDER BY (j.score - j.previous_score) ASC LIMIT 10`;
-        const champions = yield* sql<{ siteKey: string; name: string; wins: number; losses: number }>`
-          SELECT e.site_key, e.name,
-            SUM(CASE WHEN d.winner_id = e.id THEN 1 ELSE 0 END) AS wins,
-            SUM(CASE WHEN d.winner_id != e.id THEN 1 ELSE 0 END) AS losses
-          FROM entries e JOIN duels d ON d.challenger_id = e.id OR d.opponent_id = e.id
-          WHERE e.hidden = 0
-          GROUP BY e.id ORDER BY wins DESC, losses ASC LIMIT 10`;
-        return {
-          reigns,
-          mostRerolled: mostRerolled.map(toBoardEntry),
-          lowest: lowest.map(toBoardEntry),
-          bribers: bribers.map(toBoardEntry),
-          biggestJumps: jumps.map((row) => ({ ...toJudgment(row), siteKey: row.siteKey })),
-          biggestDrops: drops.map((row) => ({ ...toJudgment(row), siteKey: row.siteKey })),
-          duelChampions: champions,
-        } satisfies Hall;
-      }).pipe(Effect.orDie, Effect.withSpan("Board.hall"));
-
-      const neighbours = Effect.fn("Board.neighbours")(function* (entryId: EntryId, radius: number) {
-        const rank = yield* rankOf(entryId);
-        if (rank === null) return [];
-        const rows = yield* sql<RankedEntryRow>`
-          WITH ranked AS (${ranked})
-          SELECT * FROM ranked WHERE rank BETWEEN ${rank - radius} AND ${rank + radius} ORDER BY rank`;
-        return rows.map(toBoardEntry);
-      }, Effect.orDie);
-
       const recordClick = Effect.fn("Board.recordClick")(function* (siteKey: string) {
         const rows = yield* sql<{ url: string }>`
           UPDATE entries SET clicks = clicks + 1 WHERE site_key = ${siteKey} AND hidden = 0 RETURNING url`;
         return Option.map(Option.fromNullishOr(rows[0]), (row) => row.url);
       }, Effect.orDie);
 
-      const categories = sql<{ category: string; count: number }>`
-        SELECT category, COUNT(*) AS count FROM entries WHERE hidden = 0 GROUP BY category ORDER BY count DESC`.pipe(
-        Effect.orDie,
-        Effect.withSpan("Board.categories"),
-      );
-
-      const daily = Effect.fn("Board.daily")(function* (days: number) {
-        const since = Date.now() - days * 24 * 3600 * 1000;
-        const judged = yield* sql<{ day: string; judgments: number; rerolls: number }>`
-          SELECT strftime('%Y-%m-%d', created_at / 1000, 'unixepoch') AS day,
-                 COUNT(*) AS judgments,
-                 SUM(CASE WHEN roll > 1 THEN 1 ELSE 0 END) AS rerolls
-          FROM judgments WHERE created_at >= ${since} GROUP BY day`;
-        const paid = yield* sql<{ day: string; revenueCents: number }>`
-          SELECT strftime('%Y-%m-%d', paid_at / 1000, 'unixepoch') AS day, SUM(amount_cents) AS revenue_cents
-          FROM orders WHERE paid_at IS NOT NULL AND paid_at >= ${since} GROUP BY day`;
-        const out: Array<DailyStat> = [];
-        for (let i = days - 1; i >= 0; i--) {
-          const day = new Date(Date.now() - i * 24 * 3600 * 1000).toISOString().slice(0, 10);
-          const j = judged.find((row) => row.day === day);
-          const p = paid.find((row) => row.day === day);
-          out.push({ day, judgments: j?.judgments ?? 0, rerolls: j?.rerolls ?? 0, revenueCents: p?.revenueCents ?? 0 });
-        }
-        return out;
-      }, Effect.orDie);
-
       return Board.of({
         judgmentForOrder,
         rollsFor,
         sitemap,
-        daily,
         recordClick,
-        categories,
         findBySiteKey,
         getBySiteKey,
-        getById,
         page,
         top,
-        recent,
         tiedGroup,
         commitPlacement,
         judgments,
         judgment,
-        duelsForEntry,
         duelsForJudgment,
         events,
         stats,
-        hall,
-        neighbours,
       });
     }),
   );

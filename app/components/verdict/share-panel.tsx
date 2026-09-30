@@ -133,9 +133,6 @@ function ShareCardStandIn({ facts, serial }: { facts: ShareFacts; serial: string
             <p className="font-display text-[7cqw] uppercase leading-[0.95] [overflow-wrap:anywhere]">
               {facts.siteKey}
             </p>
-            <p className="mt-[1.5cqw] inline bg-[#111110] px-[1cqw] font-mono text-[2.5cqw] font-bold leading-[1.6] text-jev [box-decoration-break:clone]">
-              “{facts.label}”
-            </p>
           </div>
           <div className="shrink-0 text-right">
             <p className="font-display text-[19cqw] leading-[0.8]">{facts.score}</p>
