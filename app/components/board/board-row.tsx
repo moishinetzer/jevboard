@@ -49,8 +49,8 @@ function usePresence(open: boolean): boolean {
 /**
  * One business on the board, the way outbid.lol lays one out: a faded rank,
  * its app icon, and its own title and description from its homepage, then
- * when Jev judged it, its address, how many clicks the board sent it and
- * "see details". Clicking the row opens the site in a new tab; "see details"
+ * when Jev judged it, its address, its views, how many clicks the board
+ * sent it and "see details". Clicking the row opens the site in a new tab; "see details"
  * or the chevron opens Jev's verdict in place (/s/<site>). Everything the
  * open row shows came with the board, so it opens at once and slides open.
  * The top three are tinted in one colour that fades from #1 to #3.
@@ -75,6 +75,7 @@ export function BoardRow({
 }) {
   const medal = medalFor(entry.rank);
   const present = usePresence(open);
+  const viewCount = details?.totalViews ?? 0;
 
   // A row open on arrival (/s/<site>) is scrolled to straight away; one opened
   // by a click is brought into view once it has finished opening, if needed.
@@ -132,6 +133,12 @@ export function BoardRow({
               ·
             </span>
             <span className="max-w-full truncate">{entry.siteKey}</span>
+            {viewCount > 0 ? (
+              <>
+                <span aria-hidden>·</span>
+                <span>{views(viewCount)}</span>
+              </>
+            ) : null}
             {entry.clicks > 0 ? (
               <>
                 <span aria-hidden>·</span>
