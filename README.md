@@ -43,7 +43,9 @@ submit URL ─▶ validate + reachability preflight ─▶ order (pending_paymen
 - **Crawling.** Our SSRF-safe crawler fetches the homepage plus up to three informative pages (about, pricing,
   product…). That snapshot is all Jev reads; every roll crawls the site again. Slow or flaky sites get patient
   retries (longer timeouts, the www/non-www and http siblings of the address); a site that still isn't
-  answering goes back to the queue with a growing delay (30 s, 1, 2, 4 minutes).
+  answering goes back to the queue with a growing delay (30 s, 1, 2, 4 minutes). A homepage that is an empty
+  app shell without JavaScript (a client-rendered SPA) is rendered with Cloudflare Browser Run (the `BROWSER`
+  binding), and so are two of its pages; server-rendered sites never start a browser.
 - **Refunds.** A paid judgment that ends without a verdict (a site that says no, or keeps failing after every
   retry) is refunded in full automatically. `orders.refund_state` is the outbox: `due` when the order fails,
   `done` once Autumn accepts the refund, and the cron retries anything still due.

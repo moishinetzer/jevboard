@@ -3,8 +3,8 @@ import { CONTACT_EMAIL } from "./content";
 const FACTS = [
   ["When", "Only when someone asks: a quick check when a URL is submitted, then one crawl per judgment. No background crawling."],
   ["What", "Your homepage plus up to three pages it links to on the same site. Never links off-site."],
-  ["How", "Plain HTTP GETs. No JavaScript, no cookies, no logins, no forms."],
-  ["Limits", "Public http(s) addresses only. Up to 12 seconds, 1.5 MB and 5 redirects per page."],
+  ["How", "Plain HTTP GETs. If your homepage is empty without JavaScript, Jev opens it in a real browser instead (Cloudflare Browser Run), still as JevBot. No logins, no forms."],
+  ["Limits", "Public http(s) addresses only. A few tries per page, each up to 30 seconds, 1.5 MB and 5 redirects."],
 ] as const;
 
 /** "JevBot": what the crawler is and how to recognise it. Linked from the user agent. */

@@ -133,11 +133,14 @@ export const startJevboard = async (): Promise<Jevboard> => {
   const config = JSON.parse(readFileSync(configPath, "utf8")) as {
     d1_databases: Array<{ migrations_dir?: string }>;
     vars?: Record<string, unknown>;
+    browser?: unknown;
   };
   for (const database of config.d1_databases) database.migrations_dir = join(ROOT, "migrations");
   // The deployed PUBLIC_URL would send redirects and share links to production; without
   // it the app uses the request's own origin, i.e. this harness.
   delete config.vars?.["PUBLIC_URL"];
+  // The harness crawls with plain HTTP; Browser Run is a remote binding that needs an account.
+  delete config.browser;
   writeFileSync(configPath, JSON.stringify(config));
 
   const forbiddenCalls: Array<string> = [];

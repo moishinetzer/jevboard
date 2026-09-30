@@ -10,7 +10,7 @@ import {
 } from "./cloudflare/layers";
 import { AppConfig } from "./config";
 import { Board } from "./services/Board";
-import { CrawlerLive } from "./services/crawler/CrawlerLive";
+import { CrawlerCloudflare } from "./cloudflare/crawler";
 import { JudgeLive } from "./services/judge/JudgeLive";
 import { Orders } from "./services/Orders";
 import { PaymentsLive } from "./services/payments/PaymentsLive";
@@ -36,7 +36,7 @@ const Database = SqlBatchD1.pipe(Layer.provideMerge(D1Live));
 const Services = Layer.mergeAll(
   Board.layer,
   Orders.layer,
-  CrawlerLive,
+  CrawlerCloudflare,
   JudgeLive,
   PaymentsLive,
   RateLimiterCloudflare,

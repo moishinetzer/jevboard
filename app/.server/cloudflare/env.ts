@@ -1,4 +1,4 @@
-import type { D1Database, Queue, RateLimit } from "@cloudflare/workers-types";
+import type { BrowserRun, D1Database, Queue, RateLimit } from "@cloudflare/workers-types";
 import { Context } from "effect";
 
 /** Body of every message on the judgment / placement queues. */
@@ -13,6 +13,8 @@ export interface Env {
   readonly PLACEMENT_QUEUE: Queue<JudgmentJob>;
   readonly VISITOR_LIMITER?: RateLimit;
   readonly IP_LIMITER?: RateLimit;
+  /** Browser Run, for sites that only render with JavaScript. */
+  readonly BROWSER?: BrowserRun;
   readonly [variable: string]: unknown;
 }
 

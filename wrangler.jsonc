@@ -45,8 +45,12 @@
   },
 
   // Every minute: confirm payments for buyers who closed the tab, re-queue
-  // stuck judgments, prune presence heartbeats.
+  // stuck judgments, retry refunds that didn't go through.
   "triggers": { "crons": ["* * * * *"] },
+
+  // Browser Run renders homepages that are empty until JavaScript runs.
+  // "remote" makes `pnpm dev` use the real browser too (needs `wrangler login`).
+  "browser": { "binding": "BROWSER", "remote": true },
 
   // Submission rate limits (each submission triggers an outbound reachability check).
   "ratelimits": [

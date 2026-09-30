@@ -6,6 +6,7 @@ import { Crawler, type CrawlOptions } from "../Crawler";
 import { type FetchedPage, type HttpFetch, isTlsCrawlError, makePageFetcher } from "./fetch";
 import { type ExtractedPage, extractPage } from "./html";
 import { pageKey, selectLinks } from "./links";
+import { looksClientRendered, type RenderPage } from "./render";
 import { makeDohResolver, type Resolver } from "./ssrf";
 
 export interface CrawlerOptions {
@@ -40,6 +41,12 @@ export interface CrawlerOptions {
   readonly preflightTimeout?: Duration.Input;
   /** Hard ceiling for a whole `preflight`, which runs while the buyer waits. Default 15 s. */
   readonly preflightCeiling?: Duration.Input;
+  /**
+   * Renders a page in a real browser. When set, a homepage that is an empty
+   * app shell without JavaScript (a single-page app) is rendered, and so are
+   * that site's extra pages. Unset: plain HTTP only.
+   */
+  readonly render?: RenderPage;
 }
 
 const DEFAULT_HOME_TIMEOUTS: ReadonlyArray<Duration.Input> = ["12 seconds", "20 seconds", "30 seconds"];
@@ -52,6 +59,9 @@ const DEFAULT_PREFLIGHT_CEILING = "15 seconds";
 const DEFAULT_EXTRA_PAGES = 3;
 const MAX_EXTRA_PAGES = 10;
 const EXTRA_PAGE_CONCURRENCY = 3;
+/** Extra pages of a site that needed a browser: fewer, and two browsers at a time (Free plan allows three). */
+const RENDERED_EXTRA_PAGES = 2;
+const RENDER_CONCURRENCY = 2;
 /** Extra pages stop this long before the crawl's ceiling, so running out of time costs them, not the crawl. */
 const EXTRA_PAGES_SLACK_MS = 1_000;
 const HOME_TEXT_CHARS = 12_000;
@@ -244,6 +254,38 @@ export const makeCrawler = (options: CrawlerOptions): Crawler["Service"] => {
     );
   });
 
+  const render = options.render;
+
+  /**
+   * Swaps an empty app shell for the page a browser sees. Keeps the plain
+   * page when there's no renderer, the page isn't a shell, or rendering
+   * fails or finds no more text (the crawl never fails because of it).
+   */
+  const renderIfShell = (url: string, plain: FetchedPage) =>
+    Effect.gen(function* () {
+      const plainPage = extractPage(plain.html, plain.url, HOME_TEXT_CHARS);
+      const kept = { home: plain, homePage: plainPage, rendered: false };
+      if (render === undefined || !looksClientRendered(plain.html, plainPage)) return kept;
+
+      yield* Effect.logInfo("Homepage is an empty app shell; rendering it", { url: plain.url, chars: plainPage.text.length });
+      const attempt = yield* render(plain.url).pipe(
+        Effect.tap((page) => ensureSameSite(url, page.url)),
+        Effect.retry({
+          schedule: Schedule.max([Schedule.exponential(quickRetryBackoff).pipe(Schedule.jittered), Schedule.recurs(1)]),
+          while: isTransientCrawlError,
+        }),
+        Effect.result,
+      );
+      if (attempt._tag === "Failure") {
+        yield* Effect.logWarning("Rendering failed; judging the plain HTML", { url: plain.url, reason: attempt.failure.message });
+        return kept;
+      }
+      const renderedPage = extractPage(attempt.success.html, attempt.success.url, HOME_TEXT_CHARS);
+      if (renderedPage.text.length <= plainPage.text.length) return kept;
+      yield* Effect.logInfo("Rendered the homepage", { url: plain.url, chars: renderedPage.text.length });
+      return { home: attempt.success, homePage: renderedPage, rendered: true };
+    });
+
   const preflight = Effect.fn("Crawler.preflight")(
     function* (url: string) {
       const page = yield* fetchHome(url, preflightHome);
@@ -258,23 +300,30 @@ export const makeCrawler = (options: CrawlerOptions): Crawler["Service"] => {
       const maxExtraPages = Math.max(0, Math.min(crawlOptions?.maxExtraPages ?? DEFAULT_EXTRA_PAGES, MAX_EXTRA_PAGES));
 
       // The homepage must load; everything else is best effort.
-      const home = yield* fetchHome(url, crawlHome);
-      const homePage = extractPage(home.html, home.url, HOME_TEXT_CHARS);
+      const plain = yield* fetchHome(url, crawlHome);
+      const { home, homePage, rendered } = yield* renderIfShell(url, plain);
 
       // Extra pages share whatever time the homepage left; those still loading then are skipped.
-      const targets = selectLinks(homePage.links, { pageUrl: home.url, scopeUrl: url, max: maxExtraPages });
+      // A site that needed a browser for its homepage needs one for the rest too.
+      const loadExtra = rendered && render ? render : (target: string) => fetchPatiently(target, extraPage);
+      const targets = selectLinks(homePage.links, {
+        pageUrl: home.url,
+        scopeUrl: url,
+        max: rendered ? Math.min(maxExtraPages, RENDERED_EXTRA_PAGES) : maxExtraPages,
+      });
       const extras: Array<CrawledPage | undefined> = targets.map(() => undefined);
       const timeLeft = deadline - EXTRA_PAGES_SLACK_MS - (yield* Clock.currentTimeMillis);
       yield* Effect.forEach(
         targets,
         (target, index) =>
-          fetchPatiently(target, extraPage).pipe(
+          loadExtra(target).pipe(
+            Effect.tap((page) => ensureSameSite(url, page.url)),
             Effect.map((page) => {
               extras[index] = toCrawledPage(page.url, extractPage(page.html, page.url, EXTRA_TEXT_CHARS));
             }),
             Effect.catch((error) => Effect.logDebug("Skipping extra page", { url: target, reason: error.reason })),
           ),
-        { concurrency: EXTRA_PAGE_CONCURRENCY, discard: true },
+        { concurrency: rendered ? RENDER_CONCURRENCY : EXTRA_PAGE_CONCURRENCY, discard: true },
       ).pipe(
         Effect.timeoutOrElse({
           duration: Duration.millis(Math.max(0, timeLeft)),
