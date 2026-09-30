@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import type { RowDetails } from "~/.server/flows/board";
 import type { BoardEntry } from "~/.server/domain/models";
 import { JudgeForm } from "~/components/judge-form";
-import { JevFace, MEDAL_TINT, medalFor } from "~/components/logo";
+import { JevFace, medalFor } from "~/components/logo";
 import { Meter, SiteIcon, ViewsSpark } from "~/components/ui";
 import { goPath } from "~/components/verdict/links";
 import { formatCount, timeAgo } from "~/lib/format";
@@ -23,6 +23,9 @@ const EXPAND_MS = 320;
 const views = (count: number): string => `${formatCount(count)} ${count === 1 ? "view" : "views"}`;
 const sameText = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase();
 const clicks = (count: number): string => `${formatCount(count)} ${count === 1 ? "click" : "clicks"}`;
+
+/** The top three share one colour that fades with rank, like outbid's. */
+const TOP_TINT: Record<number, string> = { 1: "bg-accent/14", 2: "bg-accent/8", 3: "bg-accent/4" };
 
 /** Icons scale with rank like outbid's: #1 biggest, #2 a little smaller, the rest the same. */
 const ICON_SIZE = (rank: number): string =>
@@ -50,7 +53,7 @@ function usePresence(open: boolean): boolean {
  * "see details". Clicking the row opens the site in a new tab; "see details"
  * or the chevron opens Jev's verdict in place (/s/<site>). Everything the
  * open row shows came with the board, so it opens at once and slides open.
- * The top three keep a gold, silver or bronze tint.
+ * The top three are tinted in one colour that fades from #1 to #3.
  */
 export function BoardRow({
   entry,
@@ -89,19 +92,20 @@ export function BoardRow({
     return () => clearTimeout(timer);
   }, [open]);
 
+  // Every row keeps a 1px border (transparent unless it shows) so opening one never shifts its content.
   const frame = medal
-    ? `rounded-2xl border-[1.5px] sm:rounded-[18px] ${MEDAL_TINT[medal]}`
+    ? `rounded-2xl border border-transparent sm:rounded-[18px] ${TOP_TINT[entry.rank] ?? ""}`
     : open
       ? "rounded-2xl border border-line bg-paper sm:rounded-[18px]"
       : first
-        ? ""
-        : "border-t border-line";
+        ? "border border-transparent"
+        : "border border-transparent border-t-line";
 
   return (
     <li ref={ref} className={`scroll-mt-6 transition-colors duration-300 ${frame}`}>
-      <div className="relative grid grid-cols-[26px_auto_minmax(0,1fr)_auto] items-center gap-x-2.5 rounded-[inherit] py-3 pr-3 pl-1 transition-colors hover:bg-ink/[0.03] sm:grid-cols-[44px_auto_minmax(0,1fr)_auto] sm:gap-x-4 sm:py-3.5 sm:pr-3 sm:pl-2">
+      <div className="relative grid grid-cols-[26px_auto_minmax(0,1fr)_auto] items-center gap-x-2.5 rounded-[inherit] py-3 pr-1.5 pl-1 transition-colors hover:bg-ink/[0.03] sm:grid-cols-[44px_auto_minmax(0,1fr)_auto] sm:gap-x-4 sm:py-3.5 sm:pr-3 sm:pl-2">
         <span
-          className={`text-center font-display text-[15px] font-bold tabular-nums sm:text-xl ${medal ? "text-accent/60" : "text-soft/45"}`}
+          className={`text-center font-display text-[15px] font-bold tabular-nums sm:text-xl ${medal ? "text-accent" : "text-soft/45"}`}
         >
           #{entry.rank}
         </span>
@@ -116,7 +120,7 @@ export function BoardRow({
           >
             {entry.siteTitle ?? entry.name}
           </a>
-          <p className={`mt-0.5 text-[13px] leading-snug text-soft sm:text-sm ${open ? "" : "truncate"}`}>
+          <p className="mt-0.5 truncate text-[13px] leading-snug text-soft sm:text-sm">
             {entry.siteDescription ?? entry.tldr}
           </p>
           <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-soft/80">
@@ -139,9 +143,11 @@ export function BoardRow({
               to={open ? closeHref : entryPath(entry.siteKey)}
               preventScrollReset
               aria-expanded={open}
-              className="relative z-10 font-semibold text-soft underline decoration-soft/40 underline-offset-2 hover:text-ink hover:decoration-ink"
+              className="relative z-10 -mx-1 -my-2 inline-grid px-1 py-2 font-semibold text-soft underline decoration-soft/40 underline-offset-2 hover:text-ink hover:decoration-ink"
             >
-              {open ? "hide details" : "see details"}
+              {/* Both labels share one cell, so the line never re-wraps when the row opens. */}
+              <span className={`col-start-1 row-start-1 ${open ? "invisible" : ""}`}>see details</span>
+              <span className={`col-start-1 row-start-1 ${open ? "" : "invisible"}`}>hide details</span>
             </Link>
           </p>
         </div>
@@ -151,11 +157,11 @@ export function BoardRow({
             preventScrollReset
             tabIndex={-1}
             aria-hidden
-            className="relative z-10 hidden size-8 place-items-center rounded-full text-soft transition-colors hover:bg-pill hover:text-ink sm:grid"
+            className="relative z-10 -mr-1 grid size-11 place-items-center rounded-full text-soft transition-colors hover:bg-pill hover:text-ink"
           >
             <svg
-              width="16"
-              height="16"
+              width="20"
+              height="20"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
