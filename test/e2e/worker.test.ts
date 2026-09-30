@@ -273,6 +273,32 @@ describe("Jevboard Worker (simulated payments, mock Jev)", () => {
     expect(await jev.views("not-on-the-board.example")).toBe(0);
   });
 
+  it("guided onboarding: Jev reads the site before checkout, and the buyer's answers ride along with the order", async () => {
+    const browser = await newVisitor();
+    const start = await browser.get(`/start?url=${CANCELLED_SITE}`);
+    expect(start.status).toBe(200);
+    expect(start.html).toContain("Jev is reading");
+    expect(start.html).toContain(`>${CANCELLED_SITE}</span></h1>`);
+
+    const preview = await fetch(new URL("/api/preview", jev.baseUrl), {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: `jev_vid=${browser.visitorId}` },
+      body: new URLSearchParams({ url: CANCELLED_SITE }),
+    });
+    expect(preview.status).toBe(200);
+    const read = JSON.stringify(await preview.json());
+    expect(read, "the preview answer").toContain(`"siteKey":"${CANCELLED_SITE}"`);
+    expect(read).toContain("firstImpression");
+
+    const intake = { summary: "Examples for documents.", audiences: ["Writers"], strengths: ["Stable"], note: "", landingUrl: `https://${CANCELLED_SITE}/` };
+    const checkout = await browser.submit("/judge", { url: CANCELLED_SITE, intake: JSON.stringify(intake) });
+    const orderId = /^\/dev\/checkout\/(\w+)\?/.exec(checkout.path)?.[1] ?? "";
+    expect(orderId, `POST /judge → ${checkout.status}`).not.toBe("");
+    const order = await jev.order(orderId);
+    expect(order?.status).toBe("pending_payment");
+    expect(JSON.parse(order?.intakeJson ?? "null")).toMatchObject({ summary: "Examples for documents.", strengths: ["Stable"], note: null });
+  });
+
   it("POST /api/autumn/webhook is a 404 without AUTUMN_WEBHOOK_SECRET", async () => {
     const response = await fetch(new URL("/api/autumn/webhook", jev.baseUrl), {
       method: "POST",

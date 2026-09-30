@@ -19,7 +19,9 @@ export const action = effectAction("judge", ({ request }: Route.ActionArgs) =>
     }
     const form = yield* Effect.promise(() => request.formData());
     const url = String(form.get("url") ?? "");
-    const result = yield* submitSite(url);
+    // The guided onboarding sends its answers along (JSON); the plain form doesn't.
+    const intake = form.get("intake");
+    const result = yield* submitSite(url, typeof intake === "string" ? intake : undefined);
     if (result instanceof Response) return result;
     return data(result, { status: 400 });
   }),

@@ -16,6 +16,8 @@ const MIN_ICON_NATURAL_PX = 24;
  * A business's app icon the way outbid.lol shows one: a rounded square, filled
  * edge to edge. Its own apple-touch-icon (or large icon) when the crawl found
  * one, then Google's favicon service at 128px, then its initial on a colour.
+ * The tile is white in both themes: logos with transparent backgrounds are
+ * drawn for light pages and vanish on a dark one.
  */
 export function SiteIcon({ host, iconUrl, className }: { host: string; iconUrl: string | null; className?: string }) {
   const sources = iconUrl ? [iconUrl, faviconUrl(host, 128)] : [faviconUrl(host, 128)];
@@ -44,7 +46,7 @@ export function SiteIcon({ host, iconUrl, className }: { host: string; iconUrl: 
   return (
     <span
       aria-hidden
-      className={`block bg-card after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:shadow-[inset_0_0_0_1px_var(--line)] ${frame}`}
+      className={`block bg-white after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:shadow-[inset_0_0_0_1px_var(--line)] ${frame}`}
     >
       <img
         ref={ref}

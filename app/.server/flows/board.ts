@@ -1,7 +1,7 @@
 import { isbot } from "isbot";
 import { Effect, Option } from "effect";
 import { IN_FLIGHT_STATUSES } from "../domain/models";
-import { CurrentRequest } from "../http";
+import { CurrentRequest } from "../request";
 import { Board } from "../services/Board";
 import { Orders } from "../services/Orders";
 import { BOARD_VIEWS, Views } from "../services/Views";

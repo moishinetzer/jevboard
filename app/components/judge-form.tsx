@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
-import { useFetcher } from "react-router";
+import { type FormEvent, useEffect, useState } from "react";
+import { useFetcher, useNavigate } from "react-router";
+import { normalizeErrorMessage, normalizeSite } from "~/lib/site-key";
+import { PayLine, PriceBadge, type Pricing, priceButtonLabel } from "./price-cta";
 
 interface SubmitFailure {
   readonly ok: false;
@@ -22,6 +24,10 @@ const CHECKING_LINES = [
  * Without `siteUrl` it's the URL field plus "Get my ranking". With `siteUrl`
  * it's one button for that site: "Rejudge", or with `newSite` a first
  * judgment ("Get acme.com ranked").
+ *
+ * The URL field takes part in the live tests: `pricing` shows the price
+ * variant around the button, and `guided` sends the address to Jev's
+ * five-step onboarding (/start) instead of straight to checkout.
  */
 export function JudgeForm({
   siteUrl,
@@ -30,6 +36,8 @@ export function JudgeForm({
   autoFocus = false,
   className,
   buttonClassName,
+  pricing,
+  guided = false,
 }: {
   siteUrl?: string;
   newSite?: boolean;
@@ -39,10 +47,16 @@ export function JudgeForm({
   className?: string;
   /** Classes for the one-click button (size and width). */
   buttonClassName?: string;
+  /** The price test's variant for the URL field (none: the plain button). */
+  pricing?: Pricing;
+  /** The onboarding test's guided variant: the URL field leads to /start. */
+  guided?: boolean;
 }) {
   const fetcher = useFetcher<SubmitFailure>();
+  const navigate = useNavigate();
+  const [localError, setLocalError] = useState<SubmitFailure | null>(null);
   const busy = fetcher.state !== "idle";
-  const failure = fetcher.data && fetcher.data.ok === false ? fetcher.data : null;
+  const failure = localError ?? (fetcher.data && fetcher.data.ok === false ? fetcher.data : null);
   const [line, setLine] = useState(0);
 
   useEffect(() => {
@@ -52,10 +66,25 @@ export function JudgeForm({
   }, [busy]);
 
   const oneClick = siteUrl !== undefined;
-  const text = label ?? (!oneClick ? "Get my ranking" : newSite ? `Get ${hostOf(siteUrl)} ranked` : "Rejudge");
+  const text = label ?? (!oneClick ? priceButtonLabel(pricing?.variant ?? "control") : newSite ? `Get ${hostOf(siteUrl)} ranked` : "Rejudge");
+
+  // Guided: check the address here, then hand it to the onboarding (which does the crawl).
+  const startGuided = (event: FormEvent<HTMLFormElement>) => {
+    if (!guided || oneClick) return;
+    event.preventDefault();
+    const value = String(new FormData(event.currentTarget).get("url") ?? "").trim();
+    const normalized = normalizeSite(value);
+    if (!normalized.ok) {
+      setLocalError({ ok: false, field: "url", message: normalizeErrorMessage[normalized.error], value });
+      return;
+    }
+    setLocalError(null);
+    void navigate(`/start?url=${encodeURIComponent(value)}`);
+  };
 
   return (
-    <fetcher.Form method="post" action="/judge" className={className}>
+    <fetcher.Form method="post" action="/judge" className={className} onSubmit={startGuided}>
+      {!oneClick && pricing ? <PriceBadge variant={pricing.variant} className="mb-3.5" /> : null}
       {oneClick ? (
         <>
           <input type="hidden" name="url" value={siteUrl} />
@@ -90,6 +119,7 @@ export function JudgeForm({
           </button>
         </div>
       )}
+      {!oneClick && pricing && !busy && !failure ? <PayLine pricing={pricing} className="mt-2.5" /> : null}
       <div aria-live="polite">
         {busy ? (
           <p className="mt-2.5 text-sm font-medium text-soft">{CHECKING_LINES[line]}</p>

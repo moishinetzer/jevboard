@@ -18,6 +18,9 @@ export default [
   route("api/autumn/webhook", "routes/api.autumn-webhook.ts"),
   // Beacon: a board row was opened in the browser (counts a view)
   route("api/view", "routes/api.view.ts"),
+  // The guided onboarding (test B): Jev's read of a site before checkout, and its five steps
+  route("api/preview", "routes/api.preview.ts"),
+  route("start", "routes/start.tsx"),
   route("og.png", "routes/og-default.ts"),
   route("og/*", "routes/og.ts"),
   route("badge/*", "routes/badge.ts"),

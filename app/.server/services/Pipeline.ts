@@ -272,6 +272,7 @@ export class Pipeline extends Context.Service<
             url: order.url,
             snapshot,
             roll,
+            intake: order.intake,
           });
           const staged = yield* orders.stageVerdict(
             orderId,
@@ -349,7 +350,8 @@ export class Pipeline extends Context.Service<
         const placement: PlacementResult = yield* board.commitPlacement({
           orderId,
           siteKey: order.siteKey,
-          url: order.url,
+          // The board links to the page the buyer picked in the guided onboarding, else the address they gave.
+          url: order.intake?.landingUrl ?? order.url,
           host: hostOf(order.url),
           verdict,
           ogImage,

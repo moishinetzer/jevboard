@@ -2,8 +2,9 @@ import { Effect, Option, Result } from "effect";
 import { redirect } from "react-router";
 import { normalizeErrorMessage, normalizeSite } from "~/lib/site-key";
 import type { CrawlError } from "../domain/errors";
+import { parseIntake } from "../domain/intake";
 import { CustomerId } from "../domain/ids";
-import { CurrentRequest } from "../http";
+import { CurrentRequest } from "../request";
 import { Board } from "../services/Board";
 import { Crawler } from "../services/Crawler";
 import { JudgmentQueue } from "../services/JudgmentQueue";
@@ -20,7 +21,7 @@ export interface SubmitFailure {
   readonly value: string;
 }
 
-const preflightMessage = (error: CrawlError): string => {
+export const preflightMessage = (error: CrawlError): string => {
   switch (error.reason) {
     case "dns":
       return "Jev looked everywhere and that domain doesn't seem to exist.";
@@ -44,7 +45,7 @@ const preflightMessage = (error: CrawlError): string => {
  * *before* taking money, creates a pending order and sends the buyer to
  * checkout. Submitting a site that's already on the board is a reroll.
  */
-export const submitSite = Effect.fn("submitSite")(function* (rawUrl: string) {
+export const submitSite = Effect.fn("submitSite")(function* (rawUrl: string, rawIntake?: unknown) {
   const request = yield* CurrentRequest;
   const limiter = yield* RateLimiter;
   // Cookie-less requests get no visitor bucket of their own (a fresh id each
@@ -81,6 +82,7 @@ export const submitSite = Effect.fn("submitSite")(function* (rawUrl: string) {
     url: site.url,
     kind: Option.isSome(existing) ? "reroll" : "new",
     entryId: Option.isSome(existing) ? existing.value.id : null,
+    intake: parseIntake(rawIntake, site.url),
   });
 
   const payments = yield* Payments;

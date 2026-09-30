@@ -1,9 +1,10 @@
-import { Context, Effect, Option } from "effect";
+import { Effect, Option } from "effect";
 import type { RouterContextProvider } from "react-router";
 import { AppConfig } from "./config";
 import { toRouteOutcome } from "./route-errors";
 import { type AppServices, runtime } from "./runtime";
 import { AnalyticsActor } from "./services/Analytics";
+import { CurrentRequest } from "./request";
 import { visitorContext } from "./visitor";
 
 /**
@@ -25,20 +26,7 @@ import { visitorContext } from "./visitor";
  * become a generic 500. Client disconnects interrupt the fiber.
  */
 
-export interface CurrentRequestShape {
-  readonly request: Request;
-  readonly url: URL;
-  /** Public origin (PUBLIC_URL, or derived from the request / proxy headers). */
-  readonly origin: string;
-  /** Anonymous visitor id (`jev_vid` cookie). */
-  readonly visitorId: string;
-  /** True when the request carried no visitor cookie (first visit, or a bot). */
-  readonly visitorIsNew: boolean;
-  /** Client IP (CF-Connecting-IP; IPv6 reduced to its /64), for rate limiting only. */
-  readonly clientIp: string;
-}
-
-export class CurrentRequest extends Context.Service<CurrentRequest, CurrentRequestShape>()("jevboard/CurrentRequest") {}
+export { CurrentRequest, type CurrentRequestShape } from "./request";
 
 export type RouteServices = AppServices | CurrentRequest;
 

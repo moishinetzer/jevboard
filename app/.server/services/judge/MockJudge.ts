@@ -1,5 +1,5 @@
 import { Effect, Layer } from "effect";
-import { CATEGORIES, type Category, type SiteSnapshot, type Verdict } from "../../domain/models";
+import { CATEGORIES, type Category, type SitePreview, type SiteSnapshot, type Verdict } from "../../domain/models";
 import { Judge } from "../Judge";
 
 /**
@@ -95,6 +95,24 @@ export const makeMockVerdict = (siteKey: string, snapshot: SiteSnapshot, roll: n
   };
 };
 
+/** A deterministic onboarding preview from the snapshot alone (no model). */
+export const makeMockPreview = (siteKey: string, snapshot: SiteSnapshot): SitePreview => {
+  const headings = snapshot.pages.flatMap((page) => page.headings).filter((heading) => heading.length > 3 && heading.length <= 40);
+  const strengths = [...new Set(headings)].slice(0, 5);
+  return {
+    summary: (snapshot.description || snapshot.title || `What ${siteKey} does`).slice(0, 110),
+    category: CATEGORIES[hash(siteKey) % CATEGORIES.length] ?? "Other",
+    audiences: ["Small businesses", "Founders", "Teams", "Everyone else"].map((label, index) => ({ label, likely: index < 2 })),
+    strengths: (strengths.length > 0 ? strengths : ["Clear homepage", "Real product", "Easy to start"]).map((label, index) => ({
+      label,
+      evidence: label,
+      picked: index < 3,
+    })),
+    landingPages: snapshot.pages.slice(0, 3).map((page, index) => ({ label: index === 0 ? "Homepage" : page.title.slice(0, 24) || "Page", url: page.url })),
+    firstImpression: `Jev has read ${siteKey} and has thoughts. Mock thoughts, but thoughts.`,
+  };
+};
+
 export const MockJudgeLive = Layer.succeed(
   Judge,
   Judge.of({
@@ -116,5 +134,7 @@ export const MockJudgeLive = Layer.succeed(
         ),
         Effect.withSpan("MockJudge.duel"),
       ),
+    preview: (input) =>
+      Effect.sleep("600 millis").pipe(Effect.as(makeMockPreview(input.siteKey, input.snapshot)), Effect.withSpan("MockJudge.preview")),
   }),
 );

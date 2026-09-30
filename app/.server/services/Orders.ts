@@ -3,7 +3,8 @@ import { SqlClient } from "effect/sql";
 import { JUDGMENT_PRICE_CENTS } from "~/lib/format";
 import { NotFound } from "../domain/errors";
 import { type CustomerId, type EntryId, type JudgmentId, makeOrderId, type OrderId, randomId } from "../domain/ids";
-import { IN_FLIGHT_STATUSES, type Order, type OrderKind, type OrderStatus, type RefundState, type SiteProfile, Verdict } from "../domain/models";
+import { readIntake } from "../domain/intake";
+import { IN_FLIGHT_STATUSES, type Intake, type Order, type OrderKind, type OrderStatus, type RefundState, type SiteProfile, Verdict } from "../domain/models";
 
 interface OrderRow {
   readonly id: string;
@@ -28,6 +29,7 @@ interface OrderRow {
   readonly pagesCrawled?: string | null;
   readonly ogImage?: string | null;
   readonly siteJson?: string | null;
+  readonly intakeJson?: string | null;
 }
 
 /** Jev's verdict, parked on the order between the judging and placement stages. */
@@ -75,6 +77,7 @@ const toOrder = (row: OrderRow): Order => ({
   updatedAt: row.updatedAt,
   refundState: row.refundState ?? null,
   refundedAt: row.refundedAt ?? null,
+  intake: readIntake(row.intakeJson),
 });
 
 /**
@@ -90,6 +93,7 @@ export class Orders extends Context.Service<
       readonly url: string;
       readonly kind: OrderKind;
       readonly entryId: EntryId | null;
+      readonly intake?: Intake | null;
     }) => Effect.Effect<Order>;
     readonly get: (id: string) => Effect.Effect<Order, NotFound>;
     readonly find: (id: string) => Effect.Effect<Option.Option<Order>>;
@@ -168,6 +172,8 @@ export class Orders extends Context.Service<
         readonly url: string;
         readonly kind: OrderKind;
         readonly entryId: EntryId | null;
+        /** The guided onboarding's answers, if the buyer came through it. */
+        readonly intake?: Intake | null;
       }) {
         const now = Date.now();
         const order: Order = {
@@ -188,8 +194,10 @@ export class Orders extends Context.Service<
           updatedAt: now,
           refundState: null,
           refundedAt: null,
+          intake: input.intake ?? null,
         };
-        yield* sql`INSERT INTO orders ${sql.insert({ ...order })}`;
+        const { intake, ...columns } = order;
+        yield* sql`INSERT INTO orders ${sql.insert({ ...columns, intakeJson: intake ? JSON.stringify(intake) : null })}`;
         return order;
       }, Effect.orDie);
 

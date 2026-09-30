@@ -65,6 +65,7 @@ export interface OrderRow {
   readonly kind: string;
   readonly paidAt: number | null;
   readonly judgmentId: string | null;
+  readonly intakeJson: string | null;
 }
 
 export interface Jevboard {
@@ -185,7 +186,7 @@ export const startJevboard = async (): Promise<Jevboard> => {
       scheduled: () => worker.scheduled({ cron: "* * * * *" }),
       order: (orderId) =>
         env.DB.prepare(
-          "SELECT status, kind, paid_at AS paidAt, judgment_id AS judgmentId FROM orders WHERE id = ?",
+          "SELECT status, kind, paid_at AS paidAt, judgment_id AS judgmentId, intake_json AS intakeJson FROM orders WHERE id = ?",
         )
           .bind(orderId)
           .first<OrderRow>(),

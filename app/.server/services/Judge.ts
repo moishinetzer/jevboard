@@ -1,6 +1,6 @@
 import { Context, type Effect } from "effect";
 import type { JudgeError } from "../domain/errors";
-import type { DuelContender, DuelVerdict, SiteSnapshot, Verdict } from "../domain/models";
+import type { DuelContender, DuelVerdict, Intake, SitePreview, SiteSnapshot, Verdict } from "../domain/models";
 
 export interface JudgeInput {
   readonly siteKey: string;
@@ -8,6 +8,13 @@ export interface JudgeInput {
   readonly snapshot: SiteSnapshot;
   /** 1 for a first judgment, 2+ for rerolls. */
   readonly roll: number;
+  /** What the buyer claimed in the guided onboarding, for Jev to check against the site. */
+  readonly intake?: Intake | null;
+}
+
+export interface PreviewInput {
+  readonly siteKey: string;
+  readonly snapshot: SiteSnapshot;
 }
 
 export interface JudgeResult {
@@ -34,5 +41,7 @@ export class Judge extends Context.Service<
     readonly kind: "live" | "mock";
     readonly judge: (input: JudgeInput) => Effect.Effect<JudgeResult, JudgeError>;
     readonly duel: (input: DuelInput) => Effect.Effect<DuelVerdict, JudgeError>;
+    /** The guided onboarding's read of a site, before anyone pays: no score, no rank. */
+    readonly preview: (input: PreviewInput) => Effect.Effect<SitePreview, JudgeError>;
   }
 >()("jevboard/Judge") {}

@@ -22,9 +22,13 @@ export const middleware: Route.MiddlewareFunction[] = [visitorMiddleware];
 
 export const loader = effectLoader("root", () => loadShell);
 
-/** The shell only shows the provider mode, so the root loader re-runs after form submissions only. */
-export const shouldRevalidate: ShouldRevalidateFunction = ({ formMethod, defaultShouldRevalidate }) =>
-  formMethod !== undefined && formMethod.toUpperCase() !== "GET" ? defaultShouldRevalidate : false;
+/**
+ * The shell shows the provider mode and assigns the test variants, so it
+ * re-runs after form submissions only, and never after Jev's onboarding read
+ * (asking PostHog again mid-flow could switch a visitor's variant).
+ */
+export const shouldRevalidate: ShouldRevalidateFunction = ({ formMethod, formAction, defaultShouldRevalidate }) =>
+  formMethod !== undefined && formMethod.toUpperCase() !== "GET" && formAction !== "/api/preview" ? defaultShouldRevalidate : false;
 
 export const links: Route.LinksFunction = () => [
   { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },

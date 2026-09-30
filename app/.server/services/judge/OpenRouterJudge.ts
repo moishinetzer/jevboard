@@ -3,10 +3,17 @@ import { toCodecOpenAI } from "effect/ai/OpenAiStructuredOutput";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { AppConfig, type Effort } from "../../config";
 import { JudgeError } from "../../domain/errors";
-import { CATEGORIES, DuelVerdict, Verdict } from "../../domain/models";
+import { CATEGORIES, DuelVerdict, type SiteSnapshot, SitePreview, Verdict } from "../../domain/models";
 import { AnalyticsActor, track } from "../Analytics";
-import { type DuelInput, Judge, type JudgeInput, type JudgeResult } from "../Judge";
-import { buildDuelUserMessage, buildJudgeUserMessage, DUEL_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT } from "./prompts";
+import { type DuelInput, Judge, type JudgeInput, type JudgeResult, type PreviewInput } from "../Judge";
+import {
+  buildDuelUserMessage,
+  buildJudgeUserMessage,
+  buildPreviewUserMessage,
+  DUEL_SYSTEM_PROMPT,
+  JUDGE_SYSTEM_PROMPT,
+  PREVIEW_SYSTEM_PROMPT,
+} from "./prompts";
 import { evidenceCorpus, verifyReceipts } from "./receipts";
 
 /**
@@ -43,6 +50,9 @@ export const LIMITS = {
   duelMaxTokens: 4_000,
   judgeTimeout: "4 minutes",
   duelTimeout: "90 seconds",
+  /** The onboarding preview runs while the buyer watches, so it is small and quick. */
+  previewMaxTokens: 3_000,
+  previewTimeout: "40 seconds",
 } as const;
 
 /** ~1s, 2s (jittered): two quick retries for transient failures, then the queue takes over. */
@@ -53,13 +63,16 @@ const defaultRetrySchedule: Schedule.Schedule<unknown, JudgeError> = Schedule.ma
 
 const verdictOutput = toCodecOpenAI(Verdict);
 const duelOutput = toCodecOpenAI(DuelVerdict);
+const previewOutput = toCodecOpenAI(SitePreview);
 
 /** JSON schemas sent as `response_format` (constraints like 1-1000 are enforced by the codecs instead). */
 export const VERDICT_JSON_SCHEMA: { readonly [key: string]: unknown } = verdictOutput.jsonSchema;
 export const DUEL_JSON_SCHEMA: { readonly [key: string]: unknown } = duelOutput.jsonSchema;
+export const PREVIEW_JSON_SCHEMA: { readonly [key: string]: unknown } = previewOutput.jsonSchema;
 
 const decodeVerdict = Schema.decodeUnknownEffect(verdictOutput.codec);
 const decodeDuel = Schema.decodeUnknownEffect(duelOutput.codec);
+const decodePreview = Schema.decodeUnknownEffect(previewOutput.codec);
 const parseJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown));
 
 // ---------------------------------------------------------------------------
@@ -177,6 +190,61 @@ const tidyList = (items: ReadonlyArray<string>): Array<string> =>
   [...new Set(items.map((item) => item.trim()).filter((item) => item !== ""))].slice(0, 3);
 
 /** Cosmetic clean-up the schema can't express: trimmed text, at most 3 list items. */
+const trimTo = (text: string, max: number): string => {
+  const clean = text.replace(/\s+/g, " ").trim();
+  return clean.length <= max ? clean : `${clean.slice(0, max - 1).trimEnd()}…`;
+};
+
+/**
+ * The model's preview, made safe to show: short labels without duplicates,
+ * one to three audiences and exactly up to three strengths pre-selected, and
+ * landing pages limited to pages Jev actually read (homepage first).
+ */
+export const normalizePreview = (preview: SitePreview, snapshot: SiteSnapshot): SitePreview => {
+  const unique = <A extends { label: string }>(items: ReadonlyArray<A>, max: number, labelMax: number): Array<A> => {
+    const seen = new Set<string>();
+    const out: Array<A> = [];
+    for (const item of items) {
+      const label = trimTo(item.label, labelMax);
+      const key = label.toLowerCase();
+      if (label === "" || seen.has(key)) continue;
+      seen.add(key);
+      out.push({ ...item, label });
+      if (out.length === max) break;
+    }
+    return out;
+  };
+  const audiences = unique(preview.audiences, 6, 32);
+  const likely = audiences.filter((item) => item.likely).length;
+  const strengths = unique(preview.strengths, 6, 40).map((item) => ({ ...item, evidence: trimTo(item.evidence, 200) }));
+  let picks = 0;
+  const pickedStrengths = strengths.map((item) => {
+    const picked = item.picked && picks < 3;
+    if (picked) picks++;
+    return { ...item, picked };
+  });
+  const crawled = new Map(snapshot.pages.map((page) => [page.url, page.url]));
+  const home = snapshot.finalUrl;
+  const pages = unique(
+    [{ label: "Homepage", url: home }, ...preview.landingPages].filter((page) => page.url === home || crawled.has(page.url)),
+    3,
+    32,
+  );
+  // The homepage keeps the model's label when it gave one.
+  const homeLabel = preview.landingPages.find((page) => page.url === home)?.label;
+  const landingPages = pages
+    .filter((page, index) => index === 0 || page.url !== home)
+    .map((page, index) => (index === 0 && homeLabel ? { ...page, label: trimTo(homeLabel, 32) } : page));
+  return {
+    summary: trimTo(preview.summary, 160),
+    category: preview.category,
+    audiences: likely > 0 ? audiences : audiences.map((item, index) => ({ ...item, likely: index < 2 })),
+    strengths: picks > 0 ? pickedStrengths : pickedStrengths.map((item, index) => ({ ...item, picked: index < 3 })),
+    landingPages,
+    firstImpression: trimTo(preview.firstImpression, 160),
+  };
+};
+
 export const normalizeVerdict = (verdict: Verdict, fallbackName: string): Verdict => ({
   ...verdict,
   name: verdict.name.trim() || fallbackName,
@@ -397,7 +465,37 @@ export const makeOpenRouterJudge = (http: HttpClient.HttpClient, settings: OpenR
       ),
   );
 
-  return Judge.of({ kind: "live", judge, duel });
+  const preview = Effect.fn("OpenRouterJudge.preview")(
+    function* (input: PreviewInput) {
+      yield* Effect.annotateCurrentSpan({ siteKey: input.siteKey });
+      const response = yield* complete(
+        {
+          model: settings.model,
+          max_tokens: LIMITS.previewMaxTokens,
+          messages: [
+            { role: "system", content: PREVIEW_SYSTEM_PROMPT },
+            { role: "user", content: buildPreviewUserMessage(input) },
+          ],
+          response_format: { type: "json_schema", json_schema: { name: "onboarding", strict: true, schema: PREVIEW_JSON_SCHEMA } },
+          ...reasoningFor("low"),
+          provider: { require_parameters: true },
+        },
+        "preview",
+      );
+      const raw = yield* decodeAnswer(response, decodePreview, "preview", canonicalizeVerdict);
+      return normalizePreview(raw, input.snapshot);
+    },
+    (effect) =>
+      effect.pipe(
+        Effect.timeoutOrElse({
+          duration: LIMITS.previewTimeout,
+          orElse: () =>
+            Effect.fail(new JudgeError({ reason: "api", message: `The preview took longer than ${LIMITS.previewTimeout}`, retryable: true })),
+        }),
+      ),
+  );
+
+  return Judge.of({ kind: "live", judge, duel, preview });
 };
 
 /** Jev configured from `AppConfig.openrouter`, HTTP client not yet provided (tests inject a fake one). */
@@ -409,7 +507,12 @@ export const layerWith = (options: Partial<Pick<OpenRouterJudgeSettings, "retryS
       const http = yield* HttpClient.HttpClient;
       if (Option.isNone(config.openrouter)) {
         const notConfigured = new JudgeError({ reason: "config", message: "OPENROUTER_API_KEY is not configured", retryable: false });
-        return Judge.of({ kind: "live", judge: () => Effect.fail(notConfigured), duel: () => Effect.fail(notConfigured) });
+        return Judge.of({
+          kind: "live",
+          judge: () => Effect.fail(notConfigured),
+          duel: () => Effect.fail(notConfigured),
+          preview: () => Effect.fail(notConfigured),
+        });
       }
       return makeOpenRouterJudge(http, {
         ...config.openrouter.value,

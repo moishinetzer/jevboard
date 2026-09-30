@@ -12,6 +12,8 @@ import { AppConfig } from "./config";
 import { TracingLive } from "./observability";
 import { Analytics } from "./services/Analytics";
 import { Board } from "./services/Board";
+import { Experiments } from "./services/Experiments";
+import { Previews } from "./services/Previews";
 import { CrawlerCloudflare } from "./cloudflare/crawler";
 import { JudgeLive } from "./services/judge/JudgeLive";
 import { Orders } from "./services/Orders";
@@ -45,6 +47,8 @@ const Services = Layer.mergeAll(
   Analytics.layer,
   RateLimiterCloudflare,
   Views.layer,
+  Previews.layer,
+  Experiments.layer,
 ).pipe(Layer.provideMerge(Database));
 
 const Jobs = Layer.mergeAll(Pipeline.layer, JudgmentQueueCloudflare).pipe(Layer.provideMerge(Services));

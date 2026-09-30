@@ -1,6 +1,10 @@
 import { useEffect } from "react";
-import { Link } from "react-router";
+import { Link, useRouteLoaderData } from "react-router";
 import type { BoardData } from "~/.server/flows/board";
+import { DEFAULT_VARIANTS, FLAGS } from "~/lib/experiments";
+import { reportExposure } from "~/components/analytics";
+import type { Pricing } from "~/components/price-cta";
+import type { loader as rootLoader } from "~/root";
 import { JudgeForm } from "~/components/judge-form";
 import { HomeHeader } from "~/components/shell";
 import { formatCount } from "~/lib/format";
@@ -22,6 +26,15 @@ export function BoardPage({ data }: { data: BoardPageData }) {
 
   useEffect(() => rememberBoard(data), [data]);
 
+  // Both live tests show up in the hero: the price around the button, and where the button leads.
+  const shell = useRouteLoaderData<typeof rootLoader>("root");
+  const experiments = shell?.experiments ?? DEFAULT_VARIANTS;
+  const pricing: Pricing = { variant: experiments.price, wallet: shell?.wallet ?? "card", views: data.totalViews };
+  useEffect(() => {
+    reportExposure(FLAGS.onboarding, experiments.assigned.onboarding);
+    reportExposure(FLAGS.price, experiments.assigned.price);
+  }, [experiments]);
+
   return (
     <>
       <HomeHeader views={data.totalViews} />
@@ -39,8 +52,7 @@ export function BoardPage({ data }: { data: BoardPageData }) {
             <br />
             <span className="text-accent">Jev will be the judge.</span>
           </h1>
-          <JudgeForm className="mt-5 w-full sm:mt-[26px]" />
-          <p className="mt-2.5 text-xs text-soft sm:text-[13px]">$5 · your ranking in about a minute</p>
+          <JudgeForm className="mt-5 w-full sm:mt-[26px]" pricing={pricing} guided={experiments.onboarding === "guided"} />
         </section>
 
         <section

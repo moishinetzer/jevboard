@@ -50,6 +50,23 @@ export interface Order {
   /** "due" once a paid order failed, "done" when the refund went through. */
   readonly refundState: RefundState | null;
   readonly refundedAt: number | null;
+  /** What the buyer told Jev in the guided onboarding (null for the plain form). */
+  readonly intake: Intake | null;
+}
+
+/**
+ * What the buyer confirmed in the guided onboarding. Jev gets it as claims to
+ * check against the site, never as instructions (see ./intake.ts).
+ */
+export interface Intake {
+  /** Their one-line description of what the business does. */
+  readonly summary: string | null;
+  readonly audiences: ReadonlyArray<string>;
+  /** Up to three things they'd stake their ranking on. */
+  readonly strengths: ReadonlyArray<string>;
+  readonly note: string | null;
+  /** Where the board's link sends visitors: a page on the same site. */
+  readonly landingUrl: string | null;
 }
 
 export type RefundState = "due" | "done";
@@ -320,3 +337,23 @@ export interface BoardStats {
   readonly launchedAt: number | null;
   readonly king: { readonly siteKey: string; readonly name: string; readonly score: number; readonly since: number } | null;
 }
+
+// ---------------------------------------------------------------------------
+// Guided onboarding (test B)
+// ---------------------------------------------------------------------------
+
+/** What Jev reads on a site before anyone pays, to drive the guided onboarding. */
+export const SitePreview = Schema.Struct({
+  /** What the business does, in one plain sentence. */
+  summary: Schema.String,
+  category: Category,
+  /** Who it's for; `likely` ones start selected. */
+  audiences: Schema.Array(Schema.Struct({ label: Schema.String, likely: Schema.Boolean })),
+  /** Concrete things the site offers, with a quote as evidence; `picked` ones start selected. */
+  strengths: Schema.Array(Schema.Struct({ label: Schema.String, evidence: Schema.String, picked: Schema.Boolean })),
+  /** Pages from the crawl a visitor could land on, homepage first. */
+  landingPages: Schema.Array(Schema.Struct({ label: Schema.String, url: Schema.String })),
+  /** One line in Jev's voice about something on the site. Not a verdict. */
+  firstImpression: Schema.String,
+});
+export type SitePreview = typeof SitePreview.Type;

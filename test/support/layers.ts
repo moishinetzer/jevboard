@@ -1,3 +1,4 @@
+import { makeMockPreview } from "~/.server/services/judge/MockJudge";
 import { Effect, Layer } from "effect";
 import type { SqlClient } from "effect/sql";
 import { AppConfig } from "~/.server/config";
@@ -100,6 +101,7 @@ export const ScriptedJudge = (script: Script) =>
           const b = script.strength[input.b.siteKey] ?? 0;
           return { winner: a >= b ? ("A" as const) : ("B" as const), reason: "stronger" };
         }),
+      preview: (input) => Effect.succeed(makeMockPreview(input.siteKey, input.snapshot)),
     }),
   );
 
