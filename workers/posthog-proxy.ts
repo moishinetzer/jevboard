@@ -18,8 +18,15 @@ export const proxyPostHog = (request: Request, env: Env): Promise<Response> | un
 
   const ingestHost = new URL(typeof env["POSTHOG_HOST"] === "string" ? env["POSTHOG_HOST"] : "https://eu.i.posthog.com");
   const path = url.pathname.slice(PROXY_PATH.length) || "/";
-  const target = new URL(path + url.search, ingestHost);
+  // Only the path and query are taken from the request: setting `pathname` can never
+  // change the host, whereas `new URL("//evil.example/...", base)` would.
+  const target = new URL(ingestHost.origin);
+  target.pathname = path;
+  target.search = url.search;
   if (path.startsWith("/static/")) target.hostname = ingestHost.hostname.replace(/^(\w+)\.i\./, "$1-assets.i.");
+  if (target.hostname !== ingestHost.hostname && !target.hostname.endsWith(".posthog.com")) {
+    return Promise.resolve(new Response("Not Found", { status: 404 }));
+  }
 
   const headers = new Headers(request.headers);
   headers.delete("cookie");
@@ -32,5 +39,10 @@ export const proxyPostHog = (request: Request, env: Env): Promise<Response> | un
     headers,
     body: request.method === "GET" || request.method === "HEAD" ? null : request.body,
     redirect: "manual",
+  }).then((response) => {
+    // PostHog never needs to set cookies on our domain.
+    const safe = new Response(response.body, response);
+    safe.headers.delete("set-cookie");
+    return safe;
   });
 };
