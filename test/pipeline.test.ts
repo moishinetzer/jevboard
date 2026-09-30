@@ -337,13 +337,17 @@ describe("Pipeline", () => {
       const b = Option.getOrThrow(yield* orders.claim(order.id, Date.now() - 60_000));
       assert.notStrictEqual(a, b);
 
-      const staged = { verdict: verdictFor("race.com", 500), model: "m", pagesCrawled: [], ogImage: null };
+      const site = { title: "Race — the fastest", description: "We race.", icon: "https://race.com/apple-touch-icon.png" };
+      const staged = { verdict: verdictFor("race.com", 500), model: "m", pagesCrawled: [], ogImage: null, site };
       assert.isFalse(yield* orders.stageVerdict(order.id, staged, a)); // stale job loses
       assert.isTrue(yield* orders.stageVerdict(order.id, staged, b));
       assert.isFalse(yield* orders.stageVerdict(order.id, staged, b)); // first writer wins
 
       yield* (yield* Pipeline).place(order.id);
       assert.strictEqual((yield* orders.get(order.id)).status, "complete");
+      // The homepage's own title, description and icon reach the board row.
+      const placed = Option.getOrThrow(yield* (yield* Board).findBySiteKey("race.com"));
+      assert.deepStrictEqual([placed.siteTitle, placed.siteDescription, placed.iconUrl], [site.title, site.description, site.icon]);
       // Late progress writes from A (or anyone) can't reopen it.
       yield* orders.setStage(order.id, "tiebreaking", "late", a);
       yield* orders.setStage(order.id, "tiebreaking", "late");

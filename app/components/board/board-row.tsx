@@ -3,10 +3,10 @@ import { Link } from "react-router";
 import type { RowDetails } from "~/.server/flows/board";
 import type { BoardEntry } from "~/.server/domain/models";
 import { JudgeForm } from "~/components/judge-form";
-import { JevFace, MEDAL_TINT, medalFor, RankBadge } from "~/components/logo";
-import { Meter, SiteAvatar, ViewsSpark } from "~/components/ui";
+import { JevFace, MEDAL_TINT, medalFor } from "~/components/logo";
+import { Meter, SiteIcon, ViewsSpark } from "~/components/ui";
 import { goPath } from "~/components/verdict/links";
-import { formatCount } from "~/lib/format";
+import { formatCount, timeAgo } from "~/lib/format";
 import { entryPath } from "~/lib/site-key";
 
 const BREAKDOWN = [
@@ -21,6 +21,12 @@ const BREAKDOWN = [
 const EXPAND_MS = 320;
 
 const views = (count: number): string => `${formatCount(count)} ${count === 1 ? "view" : "views"}`;
+const sameText = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase();
+const clicks = (count: number): string => `${formatCount(count)} ${count === 1 ? "click" : "clicks"}`;
+
+/** Icons scale with rank like outbid's: #1 biggest, #2 a little smaller, the rest the same. */
+const ICON_SIZE = (rank: number): string =>
+  rank === 1 ? "size-11 sm:size-16" : rank === 2 ? "size-11 sm:size-[58px]" : "size-11 sm:size-[52px]";
 
 /**
  * True while the row is open and for the length of its closing animation,
@@ -38,10 +44,13 @@ function usePresence(open: boolean): boolean {
 }
 
 /**
- * One business on the board. The row is a link: to /s/<site> when closed
- * (which opens it in place), back to the board when open. Everything the open
- * row shows came with the board, so it opens at once and slides open.
- * The top three get a crown and a gold, silver or bronze tint.
+ * One business on the board, the way outbid.lol lays one out: a faded rank,
+ * its app icon, and its own title and description from its homepage, then
+ * when Jev judged it, its address, how many clicks the board sent it and
+ * "see details". Clicking the row opens the site in a new tab; "see details"
+ * or the chevron opens Jev's verdict in place (/s/<site>). Everything the
+ * open row shows came with the board, so it opens at once and slides open.
+ * The top three keep a gold, silver or bronze tint.
  */
 export function BoardRow({
   entry,
@@ -63,7 +72,6 @@ export function BoardRow({
 }) {
   const medal = medalFor(entry.rank);
   const present = usePresence(open);
-  const viewCount = details?.totalViews ?? 0;
 
   // A row open on arrival (/s/<site>) is scrolled to straight away; one opened
   // by a click is brought into view once it has finished opening, if needed.
@@ -91,36 +99,79 @@ export function BoardRow({
 
   return (
     <li ref={ref} className={`scroll-mt-6 transition-colors duration-300 ${frame}`}>
-      <Link
-        to={open ? closeHref : entryPath(entry.siteKey)}
-        preventScrollReset
-        aria-expanded={open}
-        className="grid grid-cols-[50px_36px_minmax(0,1fr)_auto] items-center gap-x-2.5 rounded-[inherit] py-3 pr-3 pl-2 text-ink sm:grid-cols-[64px_44px_minmax(0,1fr)_auto] sm:gap-x-3.5 sm:py-3.5 sm:pr-[18px] sm:pl-3"
-      >
-        <span className="justify-self-center">
-          <RankBadge rank={entry.rank} />
+      <div className="relative grid grid-cols-[26px_auto_minmax(0,1fr)_auto] items-center gap-x-2.5 rounded-[inherit] py-3 pr-3 pl-1 transition-colors hover:bg-ink/[0.03] sm:grid-cols-[44px_auto_minmax(0,1fr)_auto] sm:gap-x-4 sm:py-3.5 sm:pr-3 sm:pl-2">
+        <span
+          className={`text-center font-display text-[15px] font-bold tabular-nums sm:text-xl ${medal ? "text-accent/60" : "text-soft/45"}`}
+        >
+          #{entry.rank}
         </span>
-        <SiteAvatar host={entry.host} className="size-9 sm:size-11" />
-        <span className="min-w-0">
-          <span className="block truncate text-[15px] font-bold sm:text-base">
-            {entry.name}
-            <span className="ml-1.5 hidden text-[13px] font-medium text-soft sm:inline">{entry.siteKey}</span>
-          </span>
-          <span className="block truncate text-xs text-soft sm:hidden">{entry.siteKey}</span>
-          {/* On wider screens the summary stays put as the row opens (unclamped, in full ink); phones show it inside. */}
-          <span
-            className={`mt-[3px] hidden text-sm leading-[1.45] transition-colors duration-300 sm:block ${open ? "text-ink" : "text-soft sm:line-clamp-2"}`}
+        <SiteIcon host={entry.host} iconUrl={entry.iconUrl} className={ICON_SIZE(entry.rank)} />
+        <div className="min-w-0">
+          {/* The title's link stretches over the whole row: clicking the row visits the site. */}
+          <a
+            href={goPath(entry.siteKey)}
+            target="_blank"
+            rel="noopener"
+            className="block truncate text-[15px] font-bold text-ink after:absolute after:inset-0 after:rounded-[inherit] sm:text-base"
           >
-            {entry.tldr}
-          </span>
-        </span>
-        <span className="text-right">
-          <span className={`block font-display text-xl font-bold tabular-nums sm:text-[22px] ${medal ? "text-accent" : ""}`}>
+            {entry.siteTitle ?? entry.name}
+          </a>
+          <p className={`mt-0.5 text-[13px] leading-snug text-soft sm:text-sm ${open ? "" : "truncate"}`}>
+            {entry.siteDescription ?? entry.tldr}
+          </p>
+          <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-soft/80">
+            {/* Phones skip the age to keep the line short. */}
+            <span suppressHydrationWarning className="hidden sm:inline">
+              {timeAgo(entry.lastJudgedAt)}
+            </span>
+            <span aria-hidden className="hidden sm:inline">
+              ·
+            </span>
+            <span className="max-w-full truncate">{entry.siteKey}</span>
+            {entry.clicks > 0 ? (
+              <>
+                <span aria-hidden>·</span>
+                <span>{clicks(entry.clicks)}</span>
+              </>
+            ) : null}
+            <span aria-hidden>·</span>
+            <Link
+              to={open ? closeHref : entryPath(entry.siteKey)}
+              preventScrollReset
+              aria-expanded={open}
+              className="relative z-10 font-semibold text-soft underline decoration-soft/40 underline-offset-2 hover:text-ink hover:decoration-ink"
+            >
+              {open ? "hide details" : "see details"}
+            </Link>
+          </p>
+        </div>
+        <div className="flex items-center gap-0.5 sm:gap-1.5">
+          <span className={`font-display text-xl font-bold tabular-nums sm:text-[22px] ${medal ? "text-accent" : "text-ink"}`}>
             {entry.score}
           </span>
-          {viewCount > 0 ? <span className="hidden text-xs text-soft sm:block">{views(viewCount)}</span> : null}
-        </span>
-      </Link>
+          <Link
+            to={open ? closeHref : entryPath(entry.siteKey)}
+            preventScrollReset
+            tabIndex={-1}
+            aria-hidden
+            className="relative z-10 hidden size-8 place-items-center rounded-full text-soft transition-colors hover:bg-pill hover:text-ink sm:grid"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={`transition-transform duration-300 ${open ? "rotate-180" : ""}`}
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </Link>
+        </div>
+      </div>
       {present && details ? (
         <div className="expander" data-open={open} inert={!open}>
           <div className="min-h-0 overflow-hidden">
@@ -136,12 +187,15 @@ function EntryDetails({ entry, details, days }: { entry: BoardEntry; details: Ro
   const daily = days.map((day, index) => ({ day, views: details.views[index] ?? 0 }));
 
   return (
-    <div className="px-3.5 pb-4 sm:pr-[22px] sm:pb-[22px] sm:pl-[90px]">
-      <p className="text-[15px] leading-[1.55] sm:hidden">{entry.tldr}</p>
+    <div className="px-3.5 pb-4 sm:pr-[22px] sm:pb-[22px] sm:pl-[68px]">
+      {/* Jev's own summary, unless the row above already shows the same words. */}
+      {sameText(entry.tldr, entry.siteDescription ?? entry.tldr) ? null : (
+        <p className="text-[15px] leading-[1.55] sm:text-base">{entry.tldr}</p>
+      )}
 
       {details.reasoning ? (
         <>
-          <h3 className="mt-3.5 text-xs font-bold sm:mt-2 sm:text-[13px]">Why Jev put it at #{entry.rank}</h3>
+          <h3 className="mt-3.5 text-xs font-bold first:mt-1 sm:mt-[18px] sm:first:mt-1 sm:text-[13px]">Why Jev put it at #{entry.rank}</h3>
           <p className="mt-1 text-sm leading-relaxed text-soft sm:text-[15px]">{details.reasoning}</p>
           <div className="mt-3 grid gap-2 sm:mt-4 sm:grid-cols-2 sm:gap-x-7 sm:gap-y-2.5">
             {BREAKDOWN.map(([key, label]) => (

@@ -2,7 +2,7 @@ import type { ExecutionContext, MessageBatch, ScheduledController } from "@cloud
 import { createRequestHandler, RouterContextProvider } from "react-router";
 import type { Env, JudgmentJob } from "../app/.server/cloudflare/env";
 import { handleQueueBatch } from "../app/.server/cloudflare/jobs";
-import { runMaintenance } from "../app/.server/flows/maintenance";
+import { backfillSiteProfiles, runMaintenance } from "../app/.server/flows/maintenance";
 import { flushTelemetry } from "../app/.server/observability";
 import { runtime } from "../app/.server/runtime";
 import { proxyPostHog } from "./posthog-proxy";
@@ -39,7 +39,8 @@ const flush = (): Promise<void> => runtime.runPromise(flushTelemetry).catch(() =
  * The Ranked by Jev Worker:
  * - fetch: React Router (loaders/actions run Effect programs on the shared runtime)
  * - queue: paid judgments (crawl + verdict) and serialized placements
- * - scheduled: every-minute maintenance (payment sweeper, stalled-job recovery, refunds)
+ * - scheduled: every-minute maintenance (payment sweeper, stalled-job recovery, refunds,
+ *   homepage profiles for older entries)
  */
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
@@ -56,6 +57,9 @@ export default {
   },
 
   scheduled(_controller: ScheduledController, _env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(runtime.runPromise(runMaintenance).finally(flush));
+    // The two run independently: a failing crawl never holds up payments or refunds.
+    ctx.waitUntil(
+      Promise.allSettled([runtime.runPromise(runMaintenance), runtime.runPromise(backfillSiteProfiles)]).finally(flush),
+    );
   },
 };

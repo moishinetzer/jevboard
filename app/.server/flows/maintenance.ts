@@ -1,4 +1,7 @@
 import { Effect } from "effect";
+import { siteProfileOf } from "../domain/models";
+import { Board } from "../services/Board";
+import { Crawler } from "../services/Crawler";
 import { JudgmentQueue } from "../services/JudgmentQueue";
 import { Orders } from "../services/Orders";
 import { Payments } from "../services/Payments";
@@ -64,3 +67,26 @@ export const runMaintenance = Effect.gen(function* () {
     });
   }
 }).pipe(Effect.withSpan("maintenance"));
+
+/** Homepages read per cron run for entries placed before site profiles existed. */
+const PROFILE_BATCH = 3;
+
+/**
+ * Reads the homepage title, description and icon of entries placed before
+ * the board showed them (new entries get theirs when they're judged). A site
+ * that can't be read is marked checked with what it had, so it isn't retried
+ * every minute; its row keeps Jev's name and summary.
+ */
+export const backfillSiteProfiles = Effect.gen(function* () {
+  const board = yield* Board;
+  const crawler = yield* Crawler;
+  const entries = yield* board.withoutSiteProfile(PROFILE_BATCH);
+  for (const entry of entries) {
+    const profile = yield* crawler.crawl(entry.url, { maxExtraPages: 0 }).pipe(
+      Effect.map(siteProfileOf),
+      Effect.catch((error) => Effect.logInfo("Site profile unavailable", { url: entry.url, error: String(error) }).pipe(Effect.as(null))),
+    );
+    yield* board.setSiteProfile(entry.id, profile);
+  }
+  if (entries.length > 0) yield* Effect.logInfo("Site profiles read", { entries: entries.length });
+}).pipe(Effect.withSpan("maintenance.siteProfiles"));

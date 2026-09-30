@@ -12,6 +12,7 @@ import {
   type EventKind,
   IN_FLIGHT_STATUSES,
   type Judgment,
+  type SiteProfile,
   type SubScores,
   type Verdict,
 } from "../domain/models";
@@ -41,6 +42,9 @@ interface EntryRow {
   readonly hidden: number;
   readonly contentFlag: string;
   readonly ogImage: string | null;
+  readonly siteTitle: string | null;
+  readonly siteDescription: string | null;
+  readonly iconUrl: string | null;
   readonly entryNumber: number;
   readonly clicks: number;
   readonly firstJudgedAt: number;
@@ -124,6 +128,9 @@ const toBoardEntry = (row: RankedEntryRow): BoardEntry => ({
   manipulationAttempt: row.manipulationAttempt === 1,
   subscores: parseSubScores(row.subscores),
   ogImage: row.ogImage,
+  siteTitle: row.siteTitle || null,
+  siteDescription: row.siteDescription || null,
+  iconUrl: row.iconUrl || null,
   entryNumber: row.entryNumber,
   clicks: row.clicks,
   firstJudgedAt: row.firstJudgedAt,
@@ -182,6 +189,8 @@ export interface CommitPlacementInput {
   readonly verdict: Verdict;
   /** og:image found while crawling, shown on the verdict page. */
   readonly ogImage: string | null;
+  /** The homepage's own title, description and icon, shown on its board row (null: keep what we have). */
+  readonly site: SiteProfile | null;
   readonly model: string;
   readonly pagesCrawled: ReadonlyArray<string>;
   /**
@@ -264,6 +273,10 @@ export class Board extends Context.Service<
     /** Atomically writes a finished judgment, its placement and the order's completion. */
     readonly commitPlacement: (input: CommitPlacementInput) => Effect.Effect<PlacementResult>;
     readonly judgments: (entryId: EntryId) => Effect.Effect<ReadonlyArray<Judgment>>;
+    /** Visible entries whose homepage profile was never read (placed before profiles existed), oldest first. */
+    readonly withoutSiteProfile: (limit: number) => Effect.Effect<ReadonlyArray<{ readonly id: EntryId; readonly url: string }>>;
+    /** Stores what a business's homepage says about it (null: it couldn't be read; don't try again). */
+    readonly setSiteProfile: (id: EntryId, profile: SiteProfile | null) => Effect.Effect<void>;
     /** Jev's reasoning behind each entry's current verdict, by entry id (at most 100 ids). */
     readonly reasoning: (entryIds: ReadonlyArray<EntryId>) => Effect.Effect<ReadonlyMap<EntryId, string>>;
     readonly judgment: (id: string) => Effect.Effect<Option.Option<Judgment>>;
@@ -471,7 +484,11 @@ export class Board extends Context.Service<
                 worst_score = ${Math.min(existing.worstScore, S)},
                 last_delta = ${delta}, manipulation_attempt = ${verdict.manipulationAttempt ? 1 : 0},
                 hidden = ${hidden ? 1 : 0}, content_flag = ${verdict.contentFlag},
-                og_image = ${input.ogImage}, last_judged_at = ${now}
+                og_image = ${input.ogImage}, last_judged_at = ${now},
+                site_title = COALESCE(${input.site?.title || null}, site_title),
+                site_description = COALESCE(${input.site?.description || null}, site_description),
+                icon_url = CASE WHEN ${input.site ? 1 : 0} = 1 THEN ${input.site?.icon ?? null} ELSE icon_url END,
+                site_checked_at = CASE WHEN ${input.site ? 1 : 0} = 1 THEN ${now} ELSE site_checked_at END
               WHERE id = ${entryId}`);
           } else {
             writes.push(sql`INSERT INTO entries ${sql.insert({
@@ -495,6 +512,10 @@ export class Board extends Context.Service<
               hidden: hidden ? 1 : 0,
               contentFlag: verdict.contentFlag,
               ogImage: input.ogImage,
+              siteTitle: input.site?.title || null,
+              siteDescription: input.site?.description || null,
+              iconUrl: input.site?.icon ?? null,
+              siteCheckedAt: input.site ? now : null,
               entryNumber: numbers?.nextEntry ?? 1,
               clicks: 0,
               firstJudgedAt: now,
@@ -691,6 +712,23 @@ export class Board extends Context.Service<
         return rows.map(toJudgment);
       }, Effect.orDie);
 
+      const withoutSiteProfile = Effect.fn("Board.withoutSiteProfile")(function* (limit: number) {
+        const rows = yield* sql<{ readonly id: string; readonly url: string }>`
+          SELECT id, url FROM entries WHERE site_checked_at IS NULL AND hidden = 0
+          ORDER BY first_judged_at ASC LIMIT ${limit}`;
+        return rows.map((row) => ({ id: row.id as EntryId, url: row.url }));
+      }, Effect.orDie);
+
+      const setSiteProfile = Effect.fn("Board.setSiteProfile")(function* (id: EntryId, profile: SiteProfile | null) {
+        yield* sql`
+          UPDATE entries SET
+            site_title = COALESCE(${profile?.title || null}, site_title),
+            site_description = COALESCE(${profile?.description || null}, site_description),
+            icon_url = COALESCE(${profile?.icon ?? null}, icon_url),
+            site_checked_at = ${Date.now()}
+          WHERE id = ${id}`;
+      }, Effect.orDie);
+
       const reasoning = Effect.fn("Board.reasoning")(function* (entryIds: ReadonlyArray<EntryId>) {
         if (entryIds.length === 0) return new Map<EntryId, string>();
         const rows = yield* sql<{ readonly id: string; readonly reasoning: string }>`
@@ -782,6 +820,8 @@ export class Board extends Context.Service<
         tiedGroup,
         commitPlacement,
         judgments,
+        withoutSiteProfile,
+        setSiteProfile,
         reasoning,
         judgment,
         events,

@@ -3,7 +3,7 @@ import { SqlClient } from "effect/sql";
 import { JUDGMENT_PRICE_CENTS } from "~/lib/format";
 import { NotFound } from "../domain/errors";
 import { type CustomerId, type EntryId, type JudgmentId, makeOrderId, type OrderId, randomId } from "../domain/ids";
-import { IN_FLIGHT_STATUSES, type Order, type OrderKind, type OrderStatus, type RefundState, Verdict } from "../domain/models";
+import { IN_FLIGHT_STATUSES, type Order, type OrderKind, type OrderStatus, type RefundState, type SiteProfile, Verdict } from "../domain/models";
 
 interface OrderRow {
   readonly id: string;
@@ -27,6 +27,7 @@ interface OrderRow {
   readonly model?: string | null;
   readonly pagesCrawled?: string | null;
   readonly ogImage?: string | null;
+  readonly siteJson?: string | null;
 }
 
 /** Jev's verdict, parked on the order between the judging and placement stages. */
@@ -35,7 +36,24 @@ export interface StagedVerdict {
   readonly model: string;
   readonly pagesCrawled: ReadonlyArray<string>;
   readonly ogImage: string | null;
+  /** The homepage's own title, description and icon, for the board row. */
+  readonly site: SiteProfile | null;
 }
+
+/** A staged site profile, or null when it's missing or unreadable. */
+const parseSiteProfile = (json: string | null | undefined): SiteProfile | null => {
+  if (!json) return null;
+  try {
+    const value = JSON.parse(json) as Partial<Record<keyof SiteProfile, unknown>>;
+    return {
+      title: typeof value.title === "string" ? value.title : "",
+      description: typeof value.description === "string" ? value.description : "",
+      icon: typeof value.icon === "string" ? value.icon : null,
+    };
+  } catch {
+    return null;
+  }
+};
 
 const decodeVerdict = Schema.decodeUnknownOption(Schema.fromJsonString(Verdict));
 
@@ -258,6 +276,7 @@ export class Orders extends Context.Service<
         const rows = yield* sql<{ id: string }>`
           UPDATE orders SET verdict_json = ${JSON.stringify(staged.verdict)}, model = ${staged.model},
             pages_crawled = ${JSON.stringify(staged.pagesCrawled)}, og_image = ${staged.ogImage},
+            site_json = ${staged.site ? JSON.stringify(staged.site) : null},
             updated_at = ${Date.now()}
           WHERE id = ${id} AND verdict_json IS NULL AND ${writable(token)}
           RETURNING id`;
@@ -276,7 +295,13 @@ export class Orders extends Context.Service<
           } catch {
             // Keep the verdict even if the page list is unreadable.
           }
-          return { verdict, model: row.model ?? "unknown", pagesCrawled, ogImage: row.ogImage ?? null };
+          return {
+            verdict,
+            model: row.model ?? "unknown",
+            pagesCrawled,
+            ogImage: row.ogImage ?? null,
+            site: parseSiteProfile(row.siteJson),
+          };
         });
       }, Effect.orDie);
 

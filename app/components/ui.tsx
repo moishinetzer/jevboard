@@ -9,20 +9,32 @@ const hash = (text: string): number => [...text].reduce((sum, char) => (sum * 31
  * A business's round avatar: its favicon on a white disc, or its first letter
  * on a pastel one when there's no favicon. Size it with `className` (e.g. `size-11`).
  */
-export function SiteAvatar({ host, className }: { host: string; className?: string }) {
-  const [failed, setFailed] = useState(false);
+/** Smaller images are blurry at row size (and 16px is Google's "no favicon" globe): use the next source. */
+const MIN_ICON_NATURAL_PX = 24;
+
+/**
+ * A business's app icon the way outbid.lol shows one: a rounded square, filled
+ * edge to edge. Its own apple-touch-icon (or large icon) when the crawl found
+ * one, then Google's favicon service at 128px, then its initial on a colour.
+ */
+export function SiteIcon({ host, iconUrl, className }: { host: string; iconUrl: string | null; className?: string }) {
+  const sources = iconUrl ? [iconUrl, faviconUrl(host, 128)] : [faviconUrl(host, 128)];
+  const [attempt, setAttempt] = useState(0);
+  const src = sources[attempt];
   const ref = useRef<HTMLImageElement>(null);
-  // An image that failed before hydration never fires onError on the client.
+  const tooSmall = (img: HTMLImageElement) => img.naturalWidth < MIN_ICON_NATURAL_PX;
+  // An image that loaded (or failed) before hydration never fires onLoad/onError on the client.
   useEffect(() => {
     const img = ref.current;
-    if (img && img.complete && img.naturalWidth === 0) setFailed(true);
-  }, []);
+    if (img?.complete && tooSmall(img)) setAttempt((n) => n + 1);
+  }, [src]);
 
-  if (failed) {
+  const frame = `relative shrink-0 overflow-hidden rounded-[24%] ${className ?? ""}`;
+  if (!src) {
     return (
       <span
         aria-hidden
-        className={`grid shrink-0 place-items-center rounded-full text-[15px] font-bold text-on-jev sm:text-lg ${className ?? ""}`}
+        className={`grid place-items-center text-[15px] font-bold text-on-jev sm:text-lg ${frame}`}
         style={{ background: AVATAR_COLORS[hash(host) % AVATAR_COLORS.length] }}
       >
         {host.charAt(0).toUpperCase()}
@@ -30,16 +42,24 @@ export function SiteAvatar({ host, className }: { host: string; className?: stri
     );
   }
   return (
-    <span aria-hidden className={`grid shrink-0 place-items-center rounded-full border border-line bg-white ${className ?? ""}`}>
+    <span
+      aria-hidden
+      className={`block bg-card after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:shadow-[inset_0_0_0_1px_var(--line)] ${frame}`}
+    >
       <img
         ref={ref}
-        src={faviconUrl(host, 64)}
+        key={src}
+        src={src}
         alt=""
-        width={32}
-        height={32}
+        width={64}
+        height={64}
         loading="lazy"
-        className="size-[55%] object-contain"
-        onError={() => setFailed(true)}
+        referrerPolicy="no-referrer"
+        className="size-full object-cover"
+        onLoad={(event) => {
+          if (tooSmall(event.currentTarget)) setAttempt((n) => n + 1);
+        }}
+        onError={() => setAttempt((n) => n + 1)}
       />
     </span>
   );

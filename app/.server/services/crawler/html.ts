@@ -76,9 +76,47 @@ export interface ExtractedPage {
   readonly headings: ReadonlyArray<string>;
   readonly text: string;
   readonly ogImage: string | null;
+  /** The site's app icon (see `bestIcon`), or null when it only has a small favicon. */
   readonly favicon: string | null;
   readonly links: ReadonlyArray<ExtractedLink>;
 }
+
+interface IconLink {
+  readonly href: string;
+  readonly rel: ReadonlyArray<string>;
+  readonly sizes: string | null;
+  readonly type: string | null;
+}
+
+/** The icon's declared size in px (the largest of `sizes="32x32 180x180"`); Infinity for "any". */
+const iconSize = (icon: IconLink): number => {
+  const sizes = icon.sizes?.toLowerCase() ?? "";
+  if (sizes.includes("any")) return Number.POSITIVE_INFINITY;
+  return Math.max(0, ...[...sizes.matchAll(/(\d+)x(\d+)/g)].map((match) => Math.min(Number(match[1]), Number(match[2]))));
+};
+
+/** Icons at least this big look sharp in a board row; smaller ones are left to the favicon service. */
+const MIN_ICON_PX = 96;
+
+/**
+ * The icon to show for a site in a board row, the way a phone would pick it:
+ * its apple-touch-icon (180px, drawn to fill a square), else a large or SVG
+ * `rel="icon"`. Small favicons give null, and the board falls back to a
+ * favicon service that finds the sharpest one it can.
+ */
+const bestIcon = (icons: ReadonlyArray<IconLink>, base: string): string | null => {
+  const usable = icons
+    .map((icon) => ({ icon, url: absoluteHttpUrl(icon.href, base) }))
+    .filter((candidate): candidate is { icon: IconLink; url: string } => candidate.url !== null);
+  const apple = usable.find(({ icon }) => icon.rel.some((rel) => rel.startsWith("apple-touch-icon")));
+  if (apple) return apple.url;
+  const large = usable
+    .filter(({ icon }) => icon.rel.includes("icon"))
+    .map((candidate) => ({ ...candidate, size: /svg/i.test(candidate.icon.type ?? "") || /\.svg(\?|$)/i.test(candidate.url) ? Number.POSITIVE_INFINITY : iconSize(candidate.icon) }))
+    .filter(({ size }) => size >= MIN_ICON_PX)
+    .sort((a, b) => (a.size === b.size ? 0 : a.size > b.size ? -1 : 1))[0];
+  return large?.url ?? null;
+};
 
 export const MAX_HEADINGS = 20;
 const MAX_HEADING_CHARS = 200;
@@ -166,7 +204,7 @@ export const extractPage = (html: string, pageUrl: string, maxTextChars: number)
   let title = "";
   let baseHref: string | undefined;
   const meta = new Map<string, string>();
-  const icons: Array<string> = [];
+  const icons: Array<IconLink> = [];
   const rawLinks: Array<{ readonly href: string; readonly text: string }> = [];
   const headings: Array<string> = [];
   const seenHeadings = new Set<string>();
@@ -191,7 +229,9 @@ export const extractPage = (html: string, pageUrl: string, maxTextChars: number)
       case "link": {
         const rel = element.getAttribute("rel")?.toLowerCase().split(/\s+/) ?? [];
         const href = element.getAttribute("href");
-        if (href && rel.includes("icon")) icons.push(href);
+        if (href && rel.some((token) => token === "icon" || token.startsWith("apple-touch-icon"))) {
+          icons.push({ href, rel, sizes: element.getAttribute("sizes") ?? null, type: element.getAttribute("type") ?? null });
+        }
         break;
       }
       case "a": {
@@ -226,7 +266,7 @@ export const extractPage = (html: string, pageUrl: string, maxTextChars: number)
     headings,
     text: clip(text, maxTextChars),
     ogImage: absoluteHttpUrl(meta.get("og:image") ?? meta.get("og:image:url") ?? meta.get("twitter:image"), base),
-    favicon: icons.map((href) => absoluteHttpUrl(href, base)).find((url) => url !== null) ?? null,
+    favicon: bestIcon(icons, base),
     links,
   };
 };

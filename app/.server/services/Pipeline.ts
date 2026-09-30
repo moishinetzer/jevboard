@@ -1,7 +1,7 @@
 import { Cause, Context, Effect, Layer, Option, Random, Semaphore } from "effect";
 import { type CrawlError, isTransientCrawlError, type JudgeError, type NotFound } from "../domain/errors";
 import type { OrderId } from "../domain/ids";
-import { type DuelContender, TERMINAL_STATUSES, type Verdict } from "../domain/models";
+import { type DuelContender, siteProfileOf, TERMINAL_STATUSES, type Verdict } from "../domain/models";
 import { Board, type DuelRecord, type PlacementResult } from "./Board";
 import { Crawler } from "./Crawler";
 import { Judge } from "./Judge";
@@ -280,6 +280,7 @@ export class Pipeline extends Context.Service<
               model: result.model,
               pagesCrawled: snapshot.pages.map((page) => page.url),
               ogImage: snapshot.ogImage,
+              site: siteProfileOf(snapshot),
             },
             token,
           );
@@ -340,7 +341,7 @@ export class Pipeline extends Context.Service<
         if (Option.isNone(staged)) {
           return yield* Effect.logWarning("Placement requested before a verdict was staged", { orderId });
         }
-        const { verdict, model, pagesCrawled, ogImage } = staged.value;
+        const { verdict, model, pagesCrawled, ogImage, site } = staged.value;
         const flagged = verdict.contentFlag !== "none";
         const { tieOrder, duels } = flagged
           ? { tieOrder: [], duels: [] }
@@ -352,6 +353,7 @@ export class Pipeline extends Context.Service<
           host: hostOf(order.url),
           verdict,
           ogImage,
+          site,
           model,
           pagesCrawled,
           tieOrder,

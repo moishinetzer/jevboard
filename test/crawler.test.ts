@@ -89,12 +89,24 @@ describe("hopViolation", () => {
 describe("extractPage", () => {
   const page = extractPage(fixture, HOME, 12_000);
 
-  it("reads title, description, og:image and favicon", () => {
+  it("reads title, description, og:image and the app icon", () => {
     assert.strictEqual(page.title, "Acme Rockets — Fast & Friendly");
     assert.strictEqual(page.description, "Rockets for everyone.");
     assert.strictEqual(page.ogImage, "https://acme-rockets.com/img/og.png");
-    // data: URIs and apple-touch-icon are skipped; protocol-relative hrefs resolve.
-    assert.strictEqual(page.favicon, "https://cdn.acme-rockets.com/favicon.png");
+    // The apple-touch-icon wins over the small favicon.
+    assert.strictEqual(page.favicon, "https://acme-rockets.com/apple.png");
+  });
+
+  it("picks a large or SVG icon when there's no apple-touch-icon, and nothing for a small favicon", () => {
+    const icon = (links: string) => extractPage(`<head>${links}</head>`, HOME, 100).favicon;
+    assert.strictEqual(
+      icon(`<link rel="icon" sizes="32x32" href="/32.png"><link rel="icon" sizes="192x192" href="/192.png"><link rel="icon" sizes="96x96" href="/96.png">`),
+      "https://acme-rockets.com/192.png",
+    );
+    assert.strictEqual(icon(`<link rel="icon" type="image/svg+xml" href="/icon.svg">`), "https://acme-rockets.com/icon.svg");
+    assert.strictEqual(icon(`<link rel="apple-touch-icon-precomposed" href="//cdn.acme-rockets.com/touch.png">`), "https://cdn.acme-rockets.com/touch.png");
+    // Small or unsized favicons (and data: URIs) are left to the favicon service.
+    assert.isNull(icon(`<link rel="icon" type="image/png" href="//cdn.acme-rockets.com/favicon.png"><link rel="shortcut icon" href="data:image/png;base64,AAAA">`));
   });
 
   it("falls back to og:title / og:description", () => {

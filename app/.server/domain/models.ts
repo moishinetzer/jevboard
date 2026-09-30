@@ -83,6 +83,22 @@ export const SiteSnapshot = Schema.Struct({
 });
 export type SiteSnapshot = typeof SiteSnapshot.Type;
 
+/** A business as it presents itself on its homepage: what its board row shows. */
+export interface SiteProfile {
+  /** Its <title> (or og:title). */
+  readonly title: string;
+  /** Its meta description (or og:description). */
+  readonly description: string;
+  /** Its app icon (apple-touch-icon or a large icon); null when it only has a small favicon. */
+  readonly icon: string | null;
+}
+
+export const siteProfileOf = (snapshot: SiteSnapshot): SiteProfile => ({
+  title: snapshot.title,
+  description: snapshot.description,
+  icon: snapshot.favicon,
+});
+
 // ---------------------------------------------------------------------------
 // Jev's output
 // ---------------------------------------------------------------------------
@@ -199,6 +215,10 @@ export interface BoardEntry {
   readonly manipulationAttempt: boolean;
   readonly subscores: SubScores;
   readonly ogImage: string | null;
+  /** The homepage's own title, description and app icon (null until read, or when it has none). */
+  readonly siteTitle: string | null;
+  readonly siteDescription: string | null;
+  readonly iconUrl: string | null;
   /** 1-based order in which entries first joined the board ("Founding Defendant" if <= 100). */
   readonly entryNumber: number;
   /** Visitors Jev has sent to the site through /go/. */

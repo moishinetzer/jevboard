@@ -15,7 +15,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { AppConfig } from "../app/.server/config";
 import { SqliteLocal } from "../test/support/sqlite";
 import { CustomerId } from "../app/.server/domain/ids";
-import type { SiteSnapshot } from "../app/.server/domain/models";
+import { type SiteSnapshot, siteProfileOf } from "../app/.server/domain/models";
 import { Board, type DuelRecord } from "../app/.server/services/Board";
 import { makeMockVerdict } from "../app/.server/services/judge/MockJudge";
 import { Orders } from "../app/.server/services/Orders";
@@ -126,6 +126,7 @@ const program = Effect.gen(function* () {
         host: siteKey.split("/")[0]!,
         verdict,
         ogImage: snapshot.ogImage,
+        site: siteProfileOf(snapshot),
         model: "mock-jev",
         pagesCrawled: [`https://${siteKey}/`],
         tieOrder,
