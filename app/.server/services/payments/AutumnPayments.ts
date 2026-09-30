@@ -291,7 +291,9 @@ export const makeAutumnPayments = Effect.fnUntraced(function* (options: AutumnPa
    *   customers.get(expand: invoices) → POST customers/<id>/invoices/<stripe_id>/refund
    *
    * The Idempotency-Key is fixed per order and invoice, so a repeat (a cron
-   * retry after a lost reply) answers 409 instead of refunding twice.
+   * retry after a lost reply) answers 409 instead of refunding twice; Stripe
+   * itself answers 400 "already been fully refunded" for a charge already
+   * refunded. Both count as refunded.
    */
   const refund = Effect.fn("AutumnPayments.refund")(
     function* (input: { readonly orderId: string; readonly reason: string }) {
@@ -338,8 +340,9 @@ export const makeAutumnPayments = Effect.fnUntraced(function* (options: AutumnPa
           )
           .pipe(
             Effect.catchTag("AutumnError", (error) =>
-              error.status === 409 && error.code === "duplicate_idempotency_key"
-                ? Effect.logInfo("Autumn refund: already requested", { orderId: input.orderId })
+              (error.status === 409 && error.code === "duplicate_idempotency_key") ||
+              (error.status === 400 && /already been (fully )?refunded/i.test(error.message))
+                ? Effect.logInfo("Autumn refund: already refunded", { orderId: input.orderId, status: error.status })
                 : Effect.fail(error),
             ),
           );

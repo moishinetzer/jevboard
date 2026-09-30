@@ -515,6 +515,17 @@ describe("AutumnPayments.refund", () => {
     }),
   );
 
+  it.effect("a charge Stripe says is already fully refunded counts as refunded", () =>
+    Effect.gen(function* () {
+      const fake = fakeAutumn((call) =>
+        call.path === "/v1/customers.get"
+          ? { status: 200, body: customer({ invoices: [invoice()] }) }
+          : { status: 400, body: { message: "This charge has already been fully refunded", code: "invalid_request" } },
+      );
+      assert.strictEqual(yield* refund(fake), "refunded");
+    }),
+  );
+
   it.effect("no paid invoice for the plan, or no customer at all, is nothing to refund", () =>
     Effect.gen(function* () {
       const unpaid = fakeAutumn(() => ({
