@@ -116,6 +116,8 @@ export class Orders extends Context.Service<
     /** Counts one refund attempt; returns the new total. */
     readonly noteRefundAttempt: (id: OrderId) => Effect.Effect<number>;
     readonly markRefunded: (id: OrderId) => Effect.Effect<void>;
+    /** Stops retrying a refund the provider can't find a payment for; it needs a person. */
+    readonly markRefundUnresolved: (id: OrderId) => Effect.Effect<void>;
     /** Parks Jev's verdict on the order until the placement stage picks it up. */
     /** First writer wins; returns false if this job no longer owns the order or a verdict is already parked. */
     readonly stageVerdict: (id: OrderId, staged: StagedVerdict, token: string) => Effect.Effect<boolean>;
@@ -276,6 +278,12 @@ export class Orders extends Context.Service<
           WHERE id = ${id} AND refund_state = 'due'`;
       }, Effect.orDie);
 
+      const markRefundUnresolved = Effect.fn("Orders.markRefundUnresolved")(function* (id: OrderId) {
+        yield* sql`
+          UPDATE orders SET refund_state = 'unresolved', updated_at = ${Date.now()}
+          WHERE id = ${id} AND refund_state = 'due'`;
+      }, Effect.orDie);
+
       const stageVerdict = Effect.fn("Orders.stageVerdict")(function* (
         id: OrderId,
         staged: StagedVerdict,
@@ -389,6 +397,7 @@ export class Orders extends Context.Service<
         refundsDue,
         noteRefundAttempt,
         markRefunded,
+        markRefundUnresolved,
         stageVerdict,
         stagedVerdict,
         claim,

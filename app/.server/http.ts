@@ -5,7 +5,7 @@ import { toRouteOutcome } from "./route-errors";
 import { type AppServices, runtime } from "./runtime";
 import { AnalyticsActor } from "./services/Analytics";
 import { reportServerError } from "./report";
-import { CurrentRequest } from "./request";
+import { clientIpOf, CurrentRequest } from "./request";
 import { visitorContext } from "./visitor";
 
 /**
@@ -42,14 +42,6 @@ interface RouteArgs {
  */
 const originFor = (request: Request, publicUrl: Option.Option<string>): string =>
   Option.isSome(publicUrl) ? publicUrl.value : new URL(request.url).origin;
-
-/** IPv6 clients are bucketed by /64 (one customer usually owns a whole /64). */
-const clientIpOf = (request: Request): string => {
-  const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
-  if (!ip.includes(":")) return ip;
-  const groups = ip.split(":");
-  return `${groups.slice(0, 4).join(":")}::/64`;
-};
 
 const provideRequest = <A, E>(effect: Effect.Effect<A, E, RouteServices>, args: RouteArgs) =>
   Effect.gen(function* () {

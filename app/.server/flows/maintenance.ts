@@ -82,7 +82,7 @@ export const backfillSiteProfiles = Effect.gen(function* () {
   const crawler = yield* Crawler;
   const entries = yield* board.withoutSiteProfile(PROFILE_BATCH);
   for (const entry of entries) {
-    const profile = yield* crawler.crawl(entry.url, { maxExtraPages: 0 }).pipe(
+    const profile = yield* crawler.crawl(entry.url, { maxExtraPages: 0, render: false }).pipe(
       Effect.map(siteProfileOf),
       Effect.catch((error) => Effect.logInfo("Site profile unavailable", { url: entry.url, error: String(error) }).pipe(Effect.as(null))),
     );

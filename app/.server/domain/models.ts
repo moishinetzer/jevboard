@@ -69,7 +69,8 @@ export interface Intake {
   readonly landingUrl: string | null;
 }
 
-export type RefundState = "due" | "done";
+/** "unresolved": the provider found nothing to refund after several tries; a person has to look. */
+export type RefundState = "due" | "done" | "unresolved";
 
 // ---------------------------------------------------------------------------
 // Crawling

@@ -261,11 +261,11 @@ export const makeCrawler = (options: CrawlerOptions): Crawler["Service"] => {
    * page when there's no renderer, the page isn't a shell, or rendering
    * fails or finds no more text (the crawl never fails because of it).
    */
-  const renderIfShell = (url: string, plain: FetchedPage) =>
+  const renderIfShell = (url: string, plain: FetchedPage, mode: { readonly render: boolean; readonly require: boolean }) =>
     Effect.gen(function* () {
       const plainPage = extractPage(plain.html, plain.url, HOME_TEXT_CHARS);
       const kept = { home: plain, homePage: plainPage, rendered: false };
-      if (render === undefined || !looksClientRendered(plain.html, plainPage)) return kept;
+      if (render === undefined || !mode.render || !looksClientRendered(plain.html, plainPage)) return kept;
 
       yield* Effect.logInfo("Homepage is an empty app shell; rendering it", { url: plain.url, chars: plainPage.text.length });
       const attempt = yield* render(plain.url).pipe(
@@ -277,7 +277,12 @@ export const makeCrawler = (options: CrawlerOptions): Crawler["Service"] => {
         Effect.result,
       );
       if (attempt._tag === "Failure") {
-        yield* Effect.logWarning("Rendering failed; judging the plain HTML", { url: plain.url, reason: attempt.failure.message });
+        if (mode.require) {
+          // Judging an empty shell would be unfair to a paying customer: fail as temporary so the queue retries.
+          yield* Effect.logWarning("Rendering failed; trying again later", { url: plain.url, reason: attempt.failure.message });
+          return yield* new CrawlError({ url: plain.url, reason: "timeout", message: `couldn't render the page (${attempt.failure.message})` });
+        }
+        yield* Effect.logWarning("Rendering failed; reading the plain HTML", { url: plain.url, reason: attempt.failure.message });
         return kept;
       }
       const renderedPage = extractPage(attempt.success.html, attempt.success.url, HOME_TEXT_CHARS);
@@ -301,7 +306,10 @@ export const makeCrawler = (options: CrawlerOptions): Crawler["Service"] => {
 
       // The homepage must load; everything else is best effort.
       const plain = yield* fetchHome(url, crawlHome);
-      const { home, homePage, rendered } = yield* renderIfShell(url, plain);
+      const { home, homePage, rendered } = yield* renderIfShell(url, plain, {
+        render: crawlOptions?.render ?? true,
+        require: crawlOptions?.requireRender ?? false,
+      });
 
       // Extra pages share whatever time the homepage left; those still loading then are skipped.
       // A site that needed a browser for its homepage needs one for the rest too.
@@ -312,7 +320,8 @@ export const makeCrawler = (options: CrawlerOptions): Crawler["Service"] => {
         max: rendered ? Math.min(maxExtraPages, RENDERED_EXTRA_PAGES) : maxExtraPages,
       });
       const extras: Array<CrawledPage | undefined> = targets.map(() => undefined);
-      const timeLeft = deadline - EXTRA_PAGES_SLACK_MS - (yield* Clock.currentTimeMillis);
+      const now = yield* Clock.currentTimeMillis;
+      const timeLeft = Math.min(deadline - EXTRA_PAGES_SLACK_MS - now, crawlOptions?.extraPagesWithinMs ?? Number.POSITIVE_INFINITY);
       yield* Effect.forEach(
         targets,
         (target, index) =>

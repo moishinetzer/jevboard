@@ -62,8 +62,9 @@ export function GuidedFlow({ url, views, top }: { url: string; views: number; to
   const host = read?.site.host ?? (normalized.ok ? normalized.site.host : url);
   const siteKey = read?.site.siteKey ?? (normalized.ok ? normalized.site.siteKey : url);
   const name = read ? shortName(read.profile.title, host) : host;
+  // Exactly what the board will show: the site's own title and description (never the buyer's edits).
   const rowTitle = read?.profile.title || name;
-  const rowDescription = summary || read?.profile.description || "";
+  const rowDescription = read?.profile.description || "";
 
   // Ask Jev once (StrictMode runs effects twice in development).
   const asked = useRef(false);
@@ -114,7 +115,7 @@ export function GuidedFlow({ url, views, top }: { url: string; views: number; to
       iconUrl={read?.profile.icon ?? null}
       title={rowTitle}
       description={rowDescription}
-      meta={audiences.length > 0 ? `${host} · for ${audiences.slice(0, 2).join(" and ").toLowerCase()}` : host}
+      meta={host}
     />
   );
 
@@ -310,7 +311,7 @@ export function GuidedFlow({ url, views, top }: { url: string; views: number; to
   } else {
     content = (
       <>
-        {read ? <span className="tag self-start">Your row is saved</span> : null}
+        {read ? <span className="tag self-start">Ready for Jev</span> : null}
         <Heading className={read ? "mt-3" : ""}>
           Jev's ready to rank <span className="text-accent [overflow-wrap:anywhere]">{name}</span>
         </Heading>
@@ -420,7 +421,9 @@ export function GuidedFlow({ url, views, top }: { url: string; views: number; to
                 ))}
               </div>
             ) : null}
-            <p className="mt-4 text-[13px] text-soft">Jev decides where it lands once you've paid.</p>
+            <p className="mt-4 text-[13px] text-soft">
+              {strengths.length > 0 ? "Above: what you'll tell Jev. " : ""}Jev decides where it lands once you've paid.
+            </p>
           </div>
         </aside>
       </div>

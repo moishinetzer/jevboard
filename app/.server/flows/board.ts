@@ -4,6 +4,7 @@ import { IN_FLIGHT_STATUSES } from "../domain/models";
 import { CurrentRequest } from "../request";
 import { Board } from "../services/Board";
 import { Orders } from "../services/Orders";
+import { RateLimiter } from "../services/RateLimiter";
 import { BOARD_VIEWS, Views } from "../services/Views";
 
 export const PAGE_SIZE = 50;
@@ -114,6 +115,10 @@ export type BoardData = Effect.Success<ReturnType<typeof loadBoard>>;
 export const recordRowView = Effect.fn("recordRowView")(function* (siteKey: string) {
   const current = yield* CurrentRequest;
   if (isbot(current.request.headers.get("user-agent") ?? "")) return;
+  // A loop of beacons can't pump the counts: at most a few counted opens a minute per visitor and network.
+  const limiter = yield* RateLimiter;
+  const allowed = (yield* limiter.allow("visitor", `view:${current.visitorId}`)) && (yield* limiter.allow("ip", `view:${current.clientIp}`));
+  if (!allowed) return;
   const entry = yield* (yield* Board).findBySiteKey(siteKey.trim().toLowerCase().slice(0, 300));
   if (Option.isSome(entry)) yield* (yield* Views).record([entry.value.siteKey]);
 });

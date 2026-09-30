@@ -2,13 +2,14 @@ import { Effect } from "effect";
 import type { PaymentError } from "../domain/errors";
 import type { OrderId } from "../domain/ids";
 import type { RefundState } from "../domain/models";
+import { reportServerError } from "../report";
 import { track } from "./Analytics";
 import type { Orders } from "./Orders";
 import type { Payments } from "./Payments";
 
 /**
  * A paid order whose payment the provider can't find is retried this many
- * times (invoices can lag the payment) before it's closed as nothing to refund.
+ * times (invoices can lag the payment) before it's parked as unresolved.
  */
 const MISSING_PAYMENT_ATTEMPTS = 5;
 
@@ -44,7 +45,12 @@ export const makeRefunder = (orders: Orders["Service"], payments: Payments["Serv
         yield* Effect.logWarning("No payment found to refund yet", { orderId, attempts });
         return "due" satisfies RefundState;
       }
-      yield* Effect.logError("No payment found to refund; closing the refund", { orderId, attempts });
+      // Never tell the buyer they were refunded when no money moved: park it for a person.
+      yield* Effect.logError("No payment found to refund; needs a person", { orderId, attempts });
+      reportServerError(new Error(`Refund unresolved: no payment found for order ${orderId}`), { orderId, site: order.siteKey, attempts });
+      yield* orders.markRefundUnresolved(orderId);
+      yield* track("refund_unresolved", { order_id: orderId, site: order.siteKey, attempts }, { distinctId: order.customerId });
+      return "unresolved" satisfies RefundState;
     }
     yield* orders.markRefunded(orderId);
     yield* Effect.logInfo("Order refunded", { orderId, outcome, attempts });

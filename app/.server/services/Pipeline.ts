@@ -256,7 +256,8 @@ export class Pipeline extends Context.Service<
           yield* orders.setStage(orderId, "crawling", `Jev is knocking on ${host}…`, token);
           // The crawler retries each page itself; a crawl that still fails and may
           // pass later goes back to the queue (see the catch below).
-          const snapshot = yield* crawler.crawl(order.url);
+          // Paid: a JavaScript-only site that can't be rendered right now is retried (then refunded), never judged blank.
+          const snapshot = yield* crawler.crawl(order.url, { requireRender: true });
           const pageList = snapshot.pages.map((page) => new URL(page.url).pathname).join(", ");
           const roll = (yield* board.rollsFor(order.siteKey)) + 1;
           yield* orders.setStage(

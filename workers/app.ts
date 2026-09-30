@@ -82,6 +82,8 @@ export default Sentry.withSentry(
           dsn: env.SENTRY_DSN,
           environment: typeof env["PUBLIC_URL"] === "string" ? "production" : "development",
           tracesSampleRate: 0,
+          // Errors only: no cookies (the visitor id), headers, bodies or user info.
+          dataCollection: { userInfo: false, cookies: false, httpHeaders: false, httpBodies: [] },
         }
       : undefined,
   handler as unknown as ExportedHandler<Env>,

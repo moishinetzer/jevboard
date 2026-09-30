@@ -14,6 +14,18 @@ import { preflightMessage } from "./submit";
 const PREVIEW_MAX_AGE_MS = 7 * 24 * 3600 * 1000;
 /** The buyer watches this happen, so the crawl gets a short leash (the model gets its own). */
 const CRAWL_BUDGET = "25 seconds";
+/** Extra pages are a bonus: whatever loaded by then is enough. */
+const EXTRA_PAGES_MS = 8_000;
+/** One rate-limit key shared by every uncached preview on the site (see `allowed`). */
+const GLOBAL_KEY = "preview:all";
+
+/** Only a bad address is the buyer's to fix; a slow or flaky site just skips ahead to payment. */
+const isBadAddress = (error: CrawlError): boolean =>
+  error.reason === "dns" ||
+  error.reason === "blocked" ||
+  error.reason === "not-html" ||
+  error.reason === "offsite" ||
+  (error.reason === "http" && error.status !== undefined && error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 429);
 
 export type PreviewResult =
   | {
@@ -51,14 +63,19 @@ export const previewSite = Effect.fn("previewSite")(function* (rawUrl: string) {
 
   const request = yield* CurrentRequest;
   const limiter = yield* RateLimiter;
+  // Per visitor and per network, plus one budget for the whole site: made-up cookies and
+  // fresh IPs can't buy more than GLOBAL_KEY's limit of crawls and model calls a minute.
   const allowed =
-    (request.visitorIsNew || (yield* limiter.allow("visitor", request.visitorId))) && (yield* limiter.allow("ip", request.clientIp));
+    (request.visitorIsNew || (yield* limiter.allow("visitor", request.visitorId))) &&
+    (yield* limiter.allow("ip", request.clientIp)) &&
+    (yield* limiter.allow("ip", GLOBAL_KEY));
   if (!allowed) {
     return { ok: false, field: "rate", message: "Jev is reading a lot of sites right now." } satisfies PreviewResult;
   }
 
   const crawl = yield* Effect.result(
-    (yield* Crawler).crawl(site.url, { maxExtraPages: 2 }).pipe(
+    // No browser rendering here: free previews mustn't use up the capacity paid judgments need.
+    (yield* Crawler).crawl(site.url, { maxExtraPages: 2, render: false, extraPagesWithinMs: EXTRA_PAGES_MS }).pipe(
       Effect.timeoutOrElse({
         duration: CRAWL_BUDGET,
         orElse: () => Effect.fail(new CrawlError({ url: site.url, reason: "timeout", message: `no answer within ${CRAWL_BUDGET}` })),
@@ -67,7 +84,9 @@ export const previewSite = Effect.fn("previewSite")(function* (rawUrl: string) {
   );
   if (Result.isFailure(crawl)) {
     yield* track("onboarding_preview_failed", { site: site.siteKey, reason: `crawl:${crawl.failure.reason}` });
-    return { ok: false, field: "url", message: preflightMessage(crawl.failure) } satisfies PreviewResult;
+    return isBadAddress(crawl.failure)
+      ? ({ ok: false, field: "url", message: preflightMessage(crawl.failure) } satisfies PreviewResult)
+      : ({ ok: false, field: "preview", message: "Jev couldn't read it quickly enough." } satisfies PreviewResult);
   }
   const snapshot = crawl.success;
 

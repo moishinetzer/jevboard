@@ -20,15 +20,21 @@ const labels = (value: unknown, count: number): ReadonlyArray<string> =>
     ? [...new Set(value.map((item) => text(item, INTAKE_LIMITS.label)).filter((item): item is string => item !== null))].slice(0, count)
     : [];
 
-/** A landing page is only kept when it's http(s) on the site's own host (www or not). */
+/**
+ * A landing page is only kept when it's https on the site's own host (www or
+ * not) and, for sites keyed by a path (github.com/acme), under that path.
+ */
 const sameSiteUrl = (value: unknown, siteUrl: string): string | null => {
   if (typeof value !== "string" || value.length > 500) return null;
   try {
     const url = new URL(value);
     const site = new URL(siteUrl);
     const bare = (host: string) => host.toLowerCase().replace(/^www\./, "");
-    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
-    if (url.username || url.password || bare(url.hostname) !== bare(site.hostname)) return null;
+    if (url.protocol !== "https:") return null;
+    if (url.username || url.password || url.port || bare(url.hostname) !== bare(site.hostname)) return null;
+    const base = site.pathname.replace(/\/+$/, "").toLowerCase();
+    const path = url.pathname.toLowerCase();
+    if (base !== "" && path !== base && !path.startsWith(`${base}/`)) return null;
     url.hash = "";
     return url.toString();
   } catch {

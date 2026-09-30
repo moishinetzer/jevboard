@@ -27,6 +27,7 @@ if (sentry) {
     dsn: sentry.dsn,
     environment: sentry.environment,
     tracesSampleRate: 0,
+    dataCollection: { userInfo: false, cookies: false, httpHeaders: false, httpBodies: [] },
     // Noise from browser extensions and old tabs, not our code.
     ignoreErrors: ["ResizeObserver loop", "Non-Error promise rejection captured", /Failed to fetch dynamically imported module/],
     denyUrls: [/^chrome-extension:\/\//, /^moz-extension:\/\//, /^safari-(web-)?extension:\/\//],

@@ -7,7 +7,7 @@ import { parseIntake } from "~/.server/domain/intake";
 import type { SitePreview } from "~/.server/domain/models";
 import { previewSite } from "~/.server/flows/preview";
 import { walletFor } from "~/.server/flows/shell";
-import { CurrentRequest } from "~/.server/request";
+import { clientIpOf, CurrentRequest } from "~/.server/request";
 import { Crawler } from "~/.server/services/Crawler";
 import { Experiments } from "~/.server/services/Experiments";
 import { Judge } from "~/.server/services/Judge";
@@ -45,6 +45,14 @@ describe("parseIntake", () => {
 
   it("drops landing pages on other sites and anything unusable", () => {
     assert.strictEqual(parseIntake(JSON.stringify({ landingUrl: "https://evil.com/" }), site), null);
+    assert.strictEqual(parseIntake(JSON.stringify({ landingUrl: "http://acme.com/" }), site), null);
+    assert.strictEqual(parseIntake(JSON.stringify({ landingUrl: "https://acme.com:8443/" }), site), null);
+    // Sites keyed by a path keep their landing page under that path.
+    assert.strictEqual(parseIntake(JSON.stringify({ landingUrl: "https://github.com/attacker/payload" }), "https://github.com/acme"), null);
+    assert.strictEqual(
+      parseIntake(JSON.stringify({ landingUrl: "https://github.com/Acme/tool" }), "https://github.com/acme")?.landingUrl,
+      "https://github.com/Acme/tool",
+    );
     assert.strictEqual(parseIntake(JSON.stringify({ landingUrl: "javascript:alert(1)" }), site), null);
     assert.strictEqual(parseIntake("not json", site), null);
     assert.strictEqual(parseIntake("[]", site), null);
@@ -240,5 +248,17 @@ describe("Experiments", () => {
   it("parses forced variants for local development", () => {
     assert.deepStrictEqual(parseVariantOverride("onboarding=guided,price=hidden"), { onboarding: "guided", price: "hidden" });
     assert.deepStrictEqual(parseVariantOverride("price=free&onboarding=nope"), {});
+  });
+});
+
+describe("clientIpOf", () => {
+  const ipOf = (ip: string) => clientIpOf(new Request("https://rankedbyjev.com/", { headers: { "cf-connecting-ip": ip } }));
+
+  it("buckets IPv6 by its real /64, however it's written", () => {
+    assert.strictEqual(ipOf("2001:db8:0:0:1:2:3:4"), "2001:db8:0:0::/64");
+    assert.strictEqual(ipOf("2001:db8::1:2:3:4"), "2001:db8:0:0::/64");
+    assert.strictEqual(ipOf("2001:0db8:0000:0000:ffff::1"), "2001:db8:0:0::/64");
+    assert.strictEqual(ipOf("::ffff:203.0.113.9"), "203.0.113.9");
+    assert.strictEqual(ipOf("203.0.113.9"), "203.0.113.9");
   });
 });

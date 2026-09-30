@@ -76,13 +76,19 @@ export const submitSite = Effect.fn("submitSite")(function* (rawUrl: string, raw
 
   const existing = yield* (yield* Board).findBySiteKey(site.siteKey);
   const orders = yield* Orders;
+  // The guided onboarding's answers (claims for Jev, the board's link) only count on a
+  // first judgment, or a rejudge by someone who paid for this site before: a stranger's
+  // rejudge can't put words in the owner's mouth or repoint their row.
+  const intake = parseIntake(rawIntake, site.url);
+  const trusted =
+    intake !== null && (Option.isNone(existing) || (yield* orders.paidSites(request.visitorId)).includes(site.siteKey));
   const order = yield* orders.create({
     customerId: CustomerId.make(request.visitorId),
     siteKey: site.siteKey,
     url: site.url,
     kind: Option.isSome(existing) ? "reroll" : "new",
     entryId: Option.isSome(existing) ? existing.value.id : null,
-    intake: parseIntake(rawIntake, site.url),
+    intake: trusted ? intake : null,
   });
 
   const payments = yield* Payments;

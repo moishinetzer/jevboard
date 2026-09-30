@@ -378,10 +378,12 @@ function Declined({ order, flag }: { order: OrderView; flag: ContentFlag }) {
 export function Failed({ order }: { order: OrderView }) {
   const paid = order.paidAt !== null;
   const refunded = order.refundState === "done";
+  // The provider couldn't find the payment to refund: a person is on it (never claim it's refunded).
+  const checking = order.refundState === "unresolved";
   return (
     <>
       <span className="tag">
-        No verdict{paid ? (refunded ? " · $5 refunded" : " · refund on its way") : ""}
+        No verdict{paid ? (refunded ? " · $5 refunded" : checking ? " · refund being checked" : " · refund on its way") : ""}
       </span>
       <h1 className={H1}>
         Jev couldn't judge <span className="text-accent">{order.siteKey}</span>
@@ -391,7 +393,9 @@ export function Failed({ order }: { order: OrderView }) {
         {paid
           ? refunded
             ? " We've refunded your $5. Banks usually show it within 5 to 10 business days."
-            : " We're refunding your $5 now."
+            : checking
+              ? " We couldn't refund your $5 automatically, so a person is sorting it out. It can take a couple of days."
+              : " We're refunding your $5 now."
           : ""}
       </p>
       <div className="mt-8 flex flex-wrap justify-center gap-2.5 sm:mt-9">
