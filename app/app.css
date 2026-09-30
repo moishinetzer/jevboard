@@ -104,9 +104,12 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-:focus-visible {
-  outline: 2.5px solid var(--accent);
-  outline-offset: 2px;
+/* In the base layer so a control that draws its own focus state can opt out with `outline-none`. */
+@layer base {
+  :focus-visible {
+    outline: 2.5px solid var(--accent);
+    outline-offset: 2px;
+  }
 }
 
 ::selection {
