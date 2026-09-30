@@ -3,7 +3,7 @@ import { SqlClient } from "effect/sql";
 import { JUDGMENT_PRICE_CENTS } from "~/lib/format";
 import { NotFound } from "../domain/errors";
 import { type CustomerId, type EntryId, type JudgmentId, makeOrderId, type OrderId, randomId } from "../domain/ids";
-import { IN_FLIGHT_STATUSES, type Order, type OrderKind, type OrderStatus, Verdict } from "../domain/models";
+import { IN_FLIGHT_STATUSES, type Order, type OrderKind, type OrderStatus, type RefundState, Verdict } from "../domain/models";
 
 interface OrderRow {
   readonly id: string;
@@ -21,6 +21,8 @@ interface OrderRow {
   readonly paidAt: number | null;
   readonly completedAt: number | null;
   readonly updatedAt: number;
+  readonly refundState?: RefundState | null;
+  readonly refundedAt?: number | null;
   readonly verdictJson?: string | null;
   readonly model?: string | null;
   readonly pagesCrawled?: string | null;
@@ -53,6 +55,8 @@ const toOrder = (row: OrderRow): Order => ({
   paidAt: row.paidAt,
   completedAt: row.completedAt,
   updatedAt: row.updatedAt,
+  refundState: row.refundState ?? null,
+  refundedAt: row.refundedAt ?? null,
 });
 
 /**
@@ -80,7 +84,16 @@ export class Orders extends Context.Service<
     readonly setStage: (id: OrderId, status: OrderStatus, detail: string | null, token?: string) => Effect.Effect<void>;
     readonly setDetail: (id: OrderId, detail: string, token?: string) => Effect.Effect<void>;
     readonly complete: (id: OrderId, result: { readonly entryId: EntryId; readonly judgmentId: JudgmentId }) => Effect.Effect<void>;
-    readonly fail: (id: OrderId, error: string, token?: string) => Effect.Effect<void>;
+    /**
+     * Ends the order without a verdict. A paid order becomes due a refund.
+     * Returns false when the order was already finished (or another job owns it).
+     */
+    readonly fail: (id: OrderId, error: string, token?: string) => Effect.Effect<boolean>;
+    /** Paid orders still waiting for their refund, oldest first. */
+    readonly refundsDue: (limit: number) => Effect.Effect<ReadonlyArray<Order>>;
+    /** Counts one refund attempt; returns the new total. */
+    readonly noteRefundAttempt: (id: OrderId) => Effect.Effect<number>;
+    readonly markRefunded: (id: OrderId) => Effect.Effect<void>;
     /** Parks Jev's verdict on the order until the placement stage picks it up. */
     /** First writer wins; returns false if this job no longer owns the order or a verdict is already parked. */
     readonly stageVerdict: (id: OrderId, staged: StagedVerdict, token: string) => Effect.Effect<boolean>;
@@ -92,15 +105,17 @@ export class Orders extends Context.Service<
      * Queues deliver at least once; this keeps duplicate jobs from crawling twice.
      */
     readonly claim: (id: OrderId, staleBefore: number) => Effect.Effect<Option.Option<string>>;
-    /** Gives a claimed order back (status `paid`) so a queue retry can claim it right away. */
-    readonly release: (id: OrderId, token: string) => Effect.Effect<void>;
+    /**
+     * Gives a claimed order back (status `paid`) so a queue retry can claim it
+     * right away. `problem` is shown while it waits and becomes the error if
+     * every retry fails.
+     */
+    readonly release: (id: OrderId, token: string, problem?: { readonly detail: string; readonly error: string }) => Effect.Effect<void>;
     /**
      * Orders the cron should re-queue: paid but unclaimed since `unclaimedBefore`
      * (their queue message was lost), or in flight and untouched since `before`.
      */
     readonly stalled: (before: number, unclaimedBefore: number) => Effect.Effect<ReadonlyArray<Order>>;
-    /** failed -> paid, so a paid-for judgment can be retried for free. */
-    readonly retry: (id: OrderId) => Effect.Effect<boolean>;
     /** Orders a worker must (re)process, oldest first — used on boot for crash recovery. */
     readonly inFlight: Effect.Effect<ReadonlyArray<Order>>;
     /** Unpaid orders created after `since` (epoch ms), newest first — for the payment sweeper. */
@@ -153,6 +168,8 @@ export class Orders extends Context.Service<
           paidAt: null,
           completedAt: null,
           updatedAt: now,
+          refundState: null,
+          refundedAt: null,
         };
         yield* sql`INSERT INTO orders ${sql.insert({ ...order })}`;
         return order;
@@ -205,9 +222,32 @@ export class Orders extends Context.Service<
       }, Effect.orDie);
 
       const fail = Effect.fn("Orders.fail")(function* (id: OrderId, error: string, token?: string) {
+        const rows = yield* sql<{ id: string }>`
+          UPDATE orders
+          SET status = 'failed', error = ${error}, claim_token = NULL, updated_at = ${Date.now()},
+              refund_state = CASE WHEN paid_at IS NOT NULL THEN 'due' ELSE refund_state END
+          WHERE id = ${id} AND ${writable(token)}
+          RETURNING id`;
+        return rows.length > 0;
+      }, Effect.orDie);
+
+      const refundsDue = Effect.fn("Orders.refundsDue")(function* (limit: number) {
+        const rows = yield* sql<OrderRow>`
+          SELECT * FROM orders WHERE refund_state = 'due' ORDER BY updated_at ASC LIMIT ${limit}`;
+        return rows.map(toOrder);
+      }, Effect.orDie);
+
+      const noteRefundAttempt = Effect.fn("Orders.noteRefundAttempt")(function* (id: OrderId) {
+        const rows = yield* sql<{ refundAttempts: number }>`
+          UPDATE orders SET refund_attempts = refund_attempts + 1 WHERE id = ${id} RETURNING refund_attempts`;
+        return rows[0]?.refundAttempts ?? 0;
+      }, Effect.orDie);
+
+      const markRefunded = Effect.fn("Orders.markRefunded")(function* (id: OrderId) {
+        const now = Date.now();
         yield* sql`
-          UPDATE orders SET status = 'failed', error = ${error}, claim_token = NULL, updated_at = ${Date.now()}
-          WHERE id = ${id} AND ${writable(token)}`;
+          UPDATE orders SET refund_state = 'done', refunded_at = ${now}, updated_at = ${now}
+          WHERE id = ${id} AND refund_state = 'due'`;
       }, Effect.orDie);
 
       const stageVerdict = Effect.fn("Orders.stageVerdict")(function* (
@@ -251,10 +291,19 @@ export class Orders extends Context.Service<
         return rows.length > 0 ? Option.some(token) : Option.none<string>();
       }, Effect.orDie);
 
-      const release = Effect.fn("Orders.release")(function* (id: OrderId, token: string) {
-        yield* sql`
-          UPDATE orders SET status = 'paid', claim_token = NULL, updated_at = ${Date.now()}
-          WHERE id = ${id} AND claim_token = ${token} AND status NOT IN ('complete', 'failed')`;
+      const release = Effect.fn("Orders.release")(function* (
+        id: OrderId,
+        token: string,
+        problem?: { readonly detail: string; readonly error: string },
+      ) {
+        yield* problem
+          ? sql`
+              UPDATE orders SET status = 'paid', claim_token = NULL, stage_detail = ${problem.detail},
+                error = ${problem.error}, updated_at = ${Date.now()}
+              WHERE id = ${id} AND claim_token = ${token} AND status NOT IN ('complete', 'failed')`
+          : sql`
+              UPDATE orders SET status = 'paid', claim_token = NULL, updated_at = ${Date.now()}
+              WHERE id = ${id} AND claim_token = ${token} AND status NOT IN ('complete', 'failed')`;
       }, Effect.orDie);
 
       const stalled = Effect.fn("Orders.stalled")(function* (before: number, unclaimedBefore: number) {
@@ -264,16 +313,6 @@ export class Orders extends Context.Service<
              OR (status IN ${sql.in(IN_FLIGHT_STATUSES)} AND updated_at < ${before})
           ORDER BY updated_at ASC LIMIT 50`;
         return rows.map(toOrder);
-      }, Effect.orDie);
-
-      const retry = Effect.fn("Orders.retry")(function* (id: OrderId) {
-        const rows = yield* sql<{ id: string }>`
-          UPDATE orders
-          SET status = 'paid', error = NULL, verdict_json = NULL, claim_token = NULL,
-              stage_detail = 'Retrying. Jev is giving it another go.', updated_at = ${Date.now()}
-          WHERE id = ${id} AND status = 'failed'
-          RETURNING id`;
-        return rows.length > 0;
       }, Effect.orDie);
 
       const inFlight = sql<OrderRow>`
@@ -315,12 +354,14 @@ export class Orders extends Context.Service<
         setDetail,
         complete,
         fail,
+        refundsDue,
+        noteRefundAttempt,
+        markRefunded,
         stageVerdict,
         stagedVerdict,
         claim,
         release,
         stalled,
-        retry,
         inFlight,
         awaitingPayment,
         recentForCustomer,

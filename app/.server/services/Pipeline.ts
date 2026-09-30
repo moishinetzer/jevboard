@@ -1,11 +1,13 @@
-import { Cause, Context, Effect, Layer, Option, Random, Schedule, Semaphore } from "effect";
-import type { CrawlError, JudgeError } from "../domain/errors";
+import { Cause, Context, Effect, Layer, Option, Random, Semaphore } from "effect";
+import { type CrawlError, isTransientCrawlError, type JudgeError, type NotFound } from "../domain/errors";
 import type { OrderId } from "../domain/ids";
 import { type DuelContender, TERMINAL_STATUSES, type Verdict } from "../domain/models";
 import { Board, type DuelRecord, type PlacementResult } from "./Board";
 import { Crawler } from "./Crawler";
 import { Judge } from "./Judge";
 import { Orders } from "./Orders";
+import { Payments } from "./Payments";
+import { makeRefunder } from "./refunds";
 
 /**
  * An in-flight judgment untouched for this long is considered abandoned and
@@ -13,8 +15,11 @@ import { Orders } from "./Orders";
  */
 export const CLAIM_STALE_MS = 20 * 60 * 1000;
 
-/** A paid order nobody has claimed for this long lost its queue message; re-queue it. */
-export const UNCLAIMED_STALE_MS = 2 * 60 * 1000;
+/**
+ * A paid order nobody has claimed for this long lost its queue message; re-queue it.
+ * Longer than the longest queue retry delay, so a job waiting out its backoff isn't doubled.
+ */
+export const UNCLAIMED_STALE_MS = 5 * 60 * 1000;
 
 /**
  * Wall-clock budget for all duels of one placement. The placement queue runs
@@ -23,8 +28,6 @@ export const UNCLAIMED_STALE_MS = 2 * 60 * 1000;
  */
 const TIEBREAK_BUDGET_MS = 8 * 60 * 1000;
 
-/** Up to 2 retries with jittered exponential backoff for transient failures. */
-const transientRetry = Schedule.max([Schedule.exponential("1 second").pipe(Schedule.jittered), Schedule.recurs(2)]);
 
 const contenderFromVerdict = (siteKey: string, verdict: Verdict): DuelContender => ({
   siteKey,
@@ -47,13 +50,15 @@ const hostOf = (url: string): string => {
 const crawlFailureMessage = (error: CrawlError): string => {
   switch (error.reason) {
     case "dns":
-      return "Jev couldn't find that domain. Does it exist?";
+      return "Jev couldn't find that domain, even after several tries.";
     case "blocked":
       return "Jev isn't allowed to visit that address.";
     case "timeout":
-      return "Your site took too long to answer. Jev got bored and left.";
+      return "Your site kept timing out, even after several tries.";
     case "http":
-      return `Your site answered with an error (${error.message}).`;
+      return error.status === 401 || error.status === 403
+        ? `Your site turned Jev's crawler away (HTTP ${error.status}).`
+        : `Your site answered with an error (${error.message}).`;
     case "not-html":
       return "That URL isn't a web page Jev can read.";
     case "too-large":
@@ -61,14 +66,19 @@ const crawlFailureMessage = (error: CrawlError): string => {
     case "offsite":
       return `Your site ${error.message} now, so Jev can't judge it as itself. Submit the site it lands on.`;
     default:
-      return `Jev couldn't reach your site (${error.message}).`;
+      return `Jev couldn't connect to your site (${error.message}).`;
   }
 };
 
 const judgeFailureMessage = (error: JudgeError): string =>
-  error.reason === "refused"
-    ? "Jev declined to judge this one."
-    : "Jev's brain short-circuited while judging. You already paid, so retrying is free.";
+  error.reason === "refused" ? "Jev declined to judge this one." : "Jev's brain short-circuited while judging.";
+
+/** Shown on the judging page while a job waits for its queue retry. */
+const WAITING_ON_SITE = "Your site isn't answering yet. Jev will try again in a minute…";
+const WAITING_ON_JEV = "Jev needs a moment. Trying again shortly…";
+
+/** When every retry is spent and nothing more specific was recorded. */
+const GAVE_UP = "Jev tried several times and couldn't finish.";
 
 /** Outcome of the judging stage. */
 export type JudgeStageResult = "judged" | "skipped" | "failed";
@@ -87,11 +97,14 @@ export type JudgeStageResult = "judged" | "skipped" | "failed";
 export class Pipeline extends Context.Service<
   Pipeline,
   {
-    /** Stage 1. Fails only with retryable Jev errors (defects also escape) — retry the job. */
-    readonly judge: (orderId: OrderId) => Effect.Effect<JudgeStageResult, JudgeError>;
+    /**
+     * Stage 1. Fails only with problems worth another try later (a site that
+     * isn't answering, a busy Jev); retry the job. Defects also escape.
+     */
+    readonly judge: (orderId: OrderId) => Effect.Effect<JudgeStageResult, JudgeError | CrawlError>;
     /** Stage 2. Idempotent; defects escape so the job is retried. */
     readonly place: (orderId: OrderId) => Effect.Effect<void>;
-    /** Marks the order failed once its job ran out of retries. */
+    /** Marks the order failed (and refunds it) once its job ran out of retries. */
     readonly giveUp: (orderId: OrderId) => Effect.Effect<void>;
     /** Both stages back to back, failures handled (in-process queue, tests). */
     readonly run: (orderId: OrderId) => Effect.Effect<void>;
@@ -104,8 +117,26 @@ export class Pipeline extends Context.Service<
       const board = yield* Board;
       const crawler = yield* Crawler;
       const judge = yield* Judge;
+      const refund = makeRefunder(orders, yield* Payments);
       // Serializes placements for the in-process runner; on Cloudflare the placement queue does.
       const placementLock = yield* Semaphore.make(1);
+
+      /**
+       * Ends a judgment without a verdict. A paid order is refunded right away;
+       * if the refund call fails, the order stays due and the cron retries it.
+       */
+      const failAndRefund = (orderId: OrderId, message: string, token?: string) =>
+        orders.fail(orderId, message, token).pipe(
+          Effect.flatMap((failed) =>
+            failed
+              ? refund(orderId).pipe(
+                  Effect.catchTag("PaymentError", () => Effect.void),
+                  Effect.catchTag("NotFound", () => Effect.void),
+                )
+              : Effect.void,
+          ),
+          Effect.as("failed" as const),
+        );
 
       /**
        * Binary insertion into the group of entries sharing the exact same score.
@@ -189,9 +220,12 @@ export class Pipeline extends Context.Service<
        * Stage 1: crawl + verdict, parked on the order. Only the job holding the
        * claim may write, so a duplicate or stale job can't clobber progress.
        *
-       * Fails the order for definitive problems (unreachable site, refusal).
-       * Retryable Jev errors and infrastructure defects release the claim and
-       * escape, so the queue retries the job with backoff.
+       * Fails (and refunds) the order for definitive problems: a site that
+       * says no (403, 404, not a web page), a refusal. Problems that may pass
+       * (a site timing out after the crawler's own retries, a busy Jev) and
+       * infrastructure defects release the claim and escape, so the queue
+       * retries the job with a growing delay; `giveUp` refunds when it's out
+       * of retries.
        */
       const judgeStage = Effect.fn("Pipeline.judge")(function* (orderId: OrderId) {
         const order = yield* orders.get(orderId);
@@ -204,12 +238,9 @@ export class Pipeline extends Context.Service<
         const work = Effect.gen(function* () {
           const host = hostOf(order.url);
           yield* orders.setStage(orderId, "crawling", `Jev is knocking on ${host}…`, token);
-          const snapshot = yield* crawler.crawl(order.url).pipe(
-            Effect.retry({
-              schedule: transientRetry,
-              while: (error: CrawlError) => error.reason === "timeout" || error.reason === "unreachable",
-            }),
-          );
+          // The crawler retries each page itself; a crawl that still fails and may
+          // pass later goes back to the queue (see the catch below).
+          const snapshot = yield* crawler.crawl(order.url);
           const pageList = snapshot.pages.map((page) => new URL(page.url).pathname).join(", ");
           const roll = (yield* board.rollsFor(order.siteKey)) + 1;
           yield* orders.setStage(
@@ -249,16 +280,23 @@ export class Pipeline extends Context.Service<
         return yield* work.pipe(
           Effect.catchTags({
             CrawlError: (error) =>
-              Effect.logWarning("Crawl failed", error).pipe(
-                Effect.andThen(orders.fail(orderId, crawlFailureMessage(error), token)),
-                Effect.as("failed" as const),
-              ),
+              isTransientCrawlError(error)
+                ? Effect.logWarning("Crawl failed; the queue will retry", error).pipe(
+                    Effect.andThen(
+                      orders.release(orderId, token, { detail: WAITING_ON_SITE, error: crawlFailureMessage(error) }),
+                    ),
+                    Effect.andThen(Effect.fail(error)),
+                  )
+                : Effect.logWarning("Crawl failed", error).pipe(
+                    Effect.andThen(failAndRefund(orderId, crawlFailureMessage(error), token)),
+                  ),
             JudgeError: (error) =>
               error.retryable
-                ? orders.release(orderId, token).pipe(Effect.andThen(Effect.fail(error)))
+                ? orders
+                    .release(orderId, token, { detail: WAITING_ON_JEV, error: judgeFailureMessage(error) })
+                    .pipe(Effect.andThen(Effect.fail(error)))
                 : Effect.logError("Judge failed", error).pipe(
-                    Effect.andThen(orders.fail(orderId, judgeFailureMessage(error), token)),
-                    Effect.as("failed" as const),
+                    Effect.andThen(failAndRefund(orderId, judgeFailureMessage(error), token)),
                   ),
           }),
           Effect.tapCause((cause) =>
@@ -322,9 +360,13 @@ export class Pipeline extends Context.Service<
           Effect.withSpan("Pipeline.placeJob"),
         );
 
-      /** Marks a paid order failed after its job exhausted every retry. */
+      /** Fails and refunds a paid order after its job exhausted every retry, keeping the last problem as the reason. */
       const giveUp = (orderId: OrderId) =>
-        orders.fail(orderId, "Something broke inside Jev. You already paid, so retrying is free.");
+        orders.get(orderId).pipe(
+          Effect.flatMap((order) => failAndRefund(orderId, order.error ?? GAVE_UP)),
+          Effect.catchTag("NotFound", (_: NotFound) => Effect.logWarning("Order vanished", { orderId })),
+          Effect.asVoid,
+        );
 
       return Pipeline.of({
         judge: judgeJob,
@@ -332,10 +374,11 @@ export class Pipeline extends Context.Service<
         giveUp,
         run: (orderId) =>
           judgeJob(orderId).pipe(
-            // In-process there is no queue to retry with: a retryable failure ends the order.
-            Effect.catchTag("JudgeError", (error) =>
-              orders.fail(orderId, judgeFailureMessage(error)).pipe(Effect.as("failed" as const)),
-            ),
+            // In-process there is no queue to retry with: a retryable failure ends (and refunds) the order.
+            Effect.catchTags({
+              JudgeError: (error) => failAndRefund(orderId, judgeFailureMessage(error)),
+              CrawlError: (error) => failAndRefund(orderId, crawlFailureMessage(error)),
+            }),
             // In-process there's no queue: the lock plays its part.
             Effect.flatMap((result) =>
               result === "judged" ? Semaphore.withPermit(placementLock)(placeJob(orderId)) : Effect.void,

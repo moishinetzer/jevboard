@@ -12,13 +12,8 @@ import { makeTestLayer, type Script } from "./support/layers";
 
 const customer = CustomerId.make("cTestCustomer0000000000");
 
-const layerFor = (script: Script) => {
-  const base = makeTestLayer(script);
-  return JudgmentQueue.layerInProcess.pipe(
-    Layer.provideMerge(FakePaymentsLive),
-    Layer.provideMerge(base),
-  );
-};
+const layerFor = (script: Script) =>
+  JudgmentQueue.layerInProcess.pipe(Layer.provideMerge(makeTestLayer(script, [], FakePaymentsLive)));
 
 /** Waits until the order reaches a terminal state (the in-process queue runs on a fiber). */
 const settled = (orderId: string) =>
@@ -90,9 +85,41 @@ describe("maintenance (cron trigger)", () => {
         entryId: null,
       });
       yield* orders.markPaid(order.id); // …and the enqueue never happened
-      yield* sql`UPDATE orders SET updated_at = ${Date.now() - 5 * 60_000} WHERE id = ${order.id}`;
+      yield* sql`UPDATE orders SET updated_at = ${Date.now() - 6 * 60_000} WHERE id = ${order.id}`;
       yield* runMaintenance;
       assert.strictEqual((yield* settled(order.id)).status, "complete");
     }).pipe(Effect.provide(layerFor({ scores: { "lost-message.com": [444] }, strength: {}, duels: 0 }))),
+  );
+
+  it.live("refunds paid orders whose refund didn't go through when they failed", () =>
+    Effect.gen(function* () {
+      const orders = yield* Orders;
+      const payments = yield* Payments;
+      const sql = yield* SqlClient.SqlClient;
+      const order = yield* orders.create({
+        customerId: customer,
+        siteKey: "refund-me.com",
+        url: "https://refund-me.com/",
+        kind: "new",
+        entryId: null,
+      });
+      yield* payments.simulatePayment!(order.id);
+      yield* orders.markPaid(order.id);
+      // Failed after payment, but the refund call never happened (say the worker was evicted).
+      yield* orders.fail(order.id, "Your site kept timing out, even after several tries.");
+      assert.strictEqual((yield* orders.get(order.id)).refundState, "due");
+
+      yield* runMaintenance;
+      const refunded = yield* orders.get(order.id);
+      assert.strictEqual(refunded.refundState, "done");
+      assert.isNotNull(refunded.refundedAt);
+      const [row] = yield* sql<{ refundedAt: number | null }>`
+        SELECT refunded_at FROM fake_payments WHERE order_id = ${order.id}`;
+      assert.isNotNull(row?.refundedAt ?? null);
+
+      // A second run leaves it alone.
+      yield* runMaintenance;
+      assert.strictEqual((yield* orders.get(order.id)).refundedAt, refunded.refundedAt);
+    }).pipe(Effect.provide(layerFor({ scores: {}, strength: {}, duels: 0 }))),
   );
 });

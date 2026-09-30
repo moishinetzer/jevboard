@@ -9,7 +9,18 @@ import { Payments } from "../services/Payments";
 export interface JudgingView {
   readonly order: Pick<
     Order,
-    "id" | "siteKey" | "url" | "kind" | "status" | "stageDetail" | "error" | "createdAt" | "paidAt" | "completedAt"
+    | "id"
+    | "siteKey"
+    | "url"
+    | "kind"
+    | "status"
+    | "stageDetail"
+    | "error"
+    | "createdAt"
+    | "paidAt"
+    | "completedAt"
+    | "refundState"
+    | "refundedAt"
   >;
   /** Ordered pipeline steps with their state, for the progress UI. */
   readonly steps: ReadonlyArray<{ readonly key: OrderStatus; readonly label: string; readonly state: "done" | "active" | "todo" | "failed" }>;
@@ -135,20 +146,11 @@ export const loadJudging = Effect.fn("loadJudging")(function* (orderId: string) 
       createdAt: order.createdAt,
       paidAt: order.paidAt,
       completedAt: order.completedAt,
+      refundState: order.refundState,
+      refundedAt: order.refundedAt,
     },
     steps,
     done: order.status === "complete" || order.status === "failed",
     result,
   } satisfies JudgingView;
-});
-
-/** "Ask Jev again (free)" for failed orders the buyer already paid for. */
-export const retryOrder = Effect.fn("retryOrder")(function* (orderId: string) {
-  const orders = yield* Orders;
-  const order = yield* orders.get(orderId);
-  if (order.status === "failed" && order.paidAt !== null && (yield* orders.retry(order.id))) {
-    yield* (yield* JudgmentQueue).enqueue(order.id);
-    return true;
-  }
-  return false;
 });

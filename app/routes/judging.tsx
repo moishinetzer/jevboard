@@ -1,7 +1,7 @@
 import { Effect, Option } from "effect";
 import { Link, useRouteLoaderData } from "react-router";
-import { loadJudging, retryOrder } from "~/.server/flows/judging";
-import { CurrentRequest, effectAction, effectLoader } from "~/.server/http";
+import { loadJudging } from "~/.server/flows/judging";
+import { CurrentRequest, effectLoader } from "~/.server/http";
 import { Board } from "~/.server/services/Board";
 import { AwaitingPayment, Failed, usePolling, Verdict, Working } from "~/components/judging";
 import { PageHeader } from "~/components/shell";
@@ -21,10 +21,6 @@ export const loader = effectLoader("judging", ({ params }: Route.LoaderArgs) =>
     });
     return { ...view, current, origin };
   }),
-);
-
-export const action = effectAction("judging.retry", ({ params }: Route.ActionArgs) =>
-  Effect.map(retryOrder(params.orderId), (retried) => ({ retried })),
 );
 
 export const meta: Route.MetaFunction = ({ loaderData }) => {

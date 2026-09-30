@@ -4,6 +4,8 @@ import { SqlClient } from "effect/sql";
 import { CustomerId, type OrderId } from "~/.server/domain/ids";
 import { Board } from "~/.server/services/Board";
 import { Orders } from "~/.server/services/Orders";
+import { Payments } from "~/.server/services/Payments";
+import { makeRefunder } from "~/.server/services/refunds";
 import { Pipeline } from "~/.server/services/Pipeline";
 import { makeTestLayer, type Script, verdictFor } from "./support/layers";
 
@@ -160,19 +162,89 @@ describe("Pipeline", () => {
     }).pipe(Effect.provide(makeTestLayer(s)));
   });
 
-  it.effect("fails the order with a friendly message when the site is unreachable, and allows a free retry", () => {
-    const s = script({ scores: { "gone.com": [700] } });
+  it.effect("fails and refunds a paid order when the site can't be reached", () => {
+    const s = script({ scores: { "gone.com": [700] }, refunds: [] });
     return Effect.gen(function* () {
       const failed = yield* judge("gone.com");
       assert.strictEqual(failed.status, "failed");
       assert.match(failed.error ?? "", /domain/i);
+      assert.strictEqual(failed.refundState, "done");
+      assert.isNotNull(failed.refundedAt);
+      assert.deepStrictEqual(s.refunds, [failed.id]);
+      assert.strictEqual((yield* (yield* Board).stats).entries, 0);
+    }).pipe(Effect.provide(makeTestLayer(s, ["gone.com"])));
+  });
+
+  it.effect("a site that isn't answering goes back to the queue, and is refunded when the retries run out", () => {
+    const s = script({ scores: { "flaky.com": [700] }, refunds: [] });
+    return Effect.gen(function* () {
+      const orders = yield* Orders;
+      const pipeline = yield* Pipeline;
+      const order = yield* orders.create({
+        customerId: customer,
+        siteKey: "flaky.com",
+        url: "https://flaky.com/",
+        kind: "new",
+        entryId: null,
+      });
+      yield* orders.markPaid(order.id);
+
+      // The queue path: a transient crawl failure escapes so the message is retried later.
+      const attempt = yield* Effect.flip(pipeline.judge(order.id));
+      assert.strictEqual(attempt._tag, "CrawlError");
+      const waiting = yield* orders.get(order.id);
+      assert.strictEqual(waiting.status, "paid");
+      assert.match(waiting.stageDetail ?? "", /try again/i);
+      assert.isNull(waiting.refundState);
+      assert.deepStrictEqual(s.refunds, []);
+
+      // Out of retries: failed with the last problem, and refunded.
+      yield* pipeline.giveUp(order.id);
+      const failed = yield* orders.get(order.id);
+      assert.strictEqual(failed.status, "failed");
+      assert.match(failed.error ?? "", /domain/i);
+      assert.strictEqual(failed.refundState, "done");
+      assert.deepStrictEqual(s.refunds, [order.id]);
+
+      // Giving up twice never refunds twice.
+      yield* pipeline.giveUp(order.id);
+      assert.deepStrictEqual(s.refunds, [order.id]);
+    }).pipe(Effect.provide(makeTestLayer(s, ["flaky.com"])));
+  });
+
+  it.effect("a refund that fails stays due until a later attempt goes through", () => {
+    const s = script({ scores: {}, refunds: [], refundFailures: 1 });
+    return Effect.gen(function* () {
+      const failed = yield* judge("down.com");
+      assert.strictEqual(failed.status, "failed");
+      assert.strictEqual(failed.refundState, "due");
+      assert.deepStrictEqual(s.refunds, []);
 
       const orders = yield* Orders;
-      assert.isTrue(yield* orders.retry(failed.id as OrderId));
-      assert.strictEqual((yield* orders.get(failed.id)).status, "paid");
-      // A second retry of a non-failed order is refused.
-      assert.isFalse(yield* orders.retry(failed.id as OrderId));
-    }).pipe(Effect.provide(makeTestLayer(s, ["gone.com"])));
+      assert.deepStrictEqual((yield* orders.refundsDue(10)).map((order) => order.id), [failed.id]);
+      const refund = makeRefunder(orders, yield* Payments);
+      assert.strictEqual(yield* refund(failed.id), "done");
+      assert.strictEqual(yield* refund(failed.id), "done");
+      assert.deepStrictEqual(s.refunds, [failed.id]);
+      assert.deepStrictEqual(yield* orders.refundsDue(10), []);
+    }).pipe(Effect.provide(makeTestLayer(s, ["down.com"])));
+  });
+
+  it.effect("an unpaid order that fails owes no refund", () => {
+    const s = script({ scores: {}, refunds: [] });
+    return Effect.gen(function* () {
+      const orders = yield* Orders;
+      const order = yield* orders.create({
+        customerId: customer,
+        siteKey: "never.com",
+        url: "https://never.com/",
+        kind: "new",
+        entryId: null,
+      });
+      assert.isTrue(yield* orders.fail(order.id, "abandoned"));
+      assert.isNull((yield* orders.get(order.id)).refundState);
+      assert.deepStrictEqual(yield* orders.refundsDue(10), []);
+    }).pipe(Effect.provide(makeTestLayer(s)));
   });
 
   it.effect("ignores orders that were never paid", () => {

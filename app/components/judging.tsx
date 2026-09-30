@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useFetcher, useRevalidator } from "react-router";
+import { Link, useRevalidator } from "react-router";
 import type { ContentFlag, OrderStatus } from "~/.server/domain/models";
 import type { JudgingView } from "~/.server/flows/judging";
 import { JudgeForm } from "~/components/judge-form";
 import { Crown, JevFace, MEDAL_TINT, medalFor } from "~/components/logo";
+import { CONTACT_EMAIL } from "~/components/pages/faq/content";
 import { CopyButton } from "~/components/verdict/copy-button";
 import { ogPath } from "~/components/verdict/links";
 import { shareMessage, xIntentUrl } from "~/components/verdict/share-copy";
@@ -197,7 +198,9 @@ export function Working({
   /** The entry as it stands before this judgment lands (rejudges only). */
   current: { readonly score: number; readonly rank: number } | null;
 }) {
-  const detail = order.status === "paid" ? "Jev is on the way…" : (order.stageDetail ?? "Jev is on it…");
+  // A paid order with an error is waiting out a retry; its detail says so.
+  const detail =
+    order.status === "paid" && order.error === null ? "Jev is on the way…" : (order.stageDetail ?? "Jev is on it…");
   const progress = PROGRESS[order.status] ?? 50;
   return (
     <>
@@ -373,38 +376,46 @@ function Declined({ order, flag }: { order: OrderView; flag: ContentFlag }) {
 // ---------------------------------------------------------------------------
 
 export function Failed({ order }: { order: OrderView }) {
-  const fetcher = useFetcher<{ retried: boolean }>();
-  const busy = fetcher.state !== "idle";
-  const canRetry = order.paidAt !== null;
+  const paid = order.paidAt !== null;
+  const refunded = order.refundState === "done";
   return (
     <>
-      <span className="tag">No verdict{canRetry ? " · your retry is free" : ""}</span>
+      <span className="tag">
+        No verdict{paid ? (refunded ? " · $5 refunded" : " · refund on its way") : ""}
+      </span>
       <h1 className={H1}>
         Jev couldn't judge <span className="text-accent">{order.siteKey}</span>
       </h1>
       <p className="mt-4 max-w-[540px] text-base leading-relaxed text-soft sm:text-[17px]">
-        {order.error ?? "Something went wrong inside Jev."} That isn't a verdict, so nothing lands on the board
-        {canRetry ? " and trying again costs nothing" : ""}.
+        {order.error ?? "Something went wrong inside Jev."} That isn't a verdict, so nothing lands on the board.
+        {paid
+          ? refunded
+            ? " We've refunded your $5. Banks usually show it within 5 to 10 business days."
+            : " We're refunding your $5 now."
+          : ""}
       </p>
       <div className="mt-8 flex flex-wrap justify-center gap-2.5 sm:mt-9">
-        {canRetry ? (
-          <fetcher.Form method="post">
-            <button type="submit" disabled={busy} className={`btn ${BIG_BUTTON}`}>
-              {busy ? "Asking Jev…" : "Ask Jev again (free)"}
-            </button>
-          </fetcher.Form>
-        ) : null}
+        <JudgeForm
+          siteUrl={order.url}
+          newSite={order.kind !== "reroll"}
+          label="Try again · $5"
+          buttonClassName={`btn ${BIG_BUTTON}`}
+        />
         <Link to="/" className={`btn btn-ghost ${BIG_BUTTON}`}>
           Back to the board
         </Link>
       </div>
-      {fetcher.data?.retried === false ? (
-        <p role="alert" className="mt-4 text-sm font-semibold text-bad">
-          Jev couldn't restart this one. Refresh the page: it may already be back in the queue.
-        </p>
-      ) : null}
       <p className="mt-4 text-[13px] text-soft [overflow-wrap:anywhere]">
-        Still stuck? Check that {order.url} loads without a login.
+        Check that {order.url} loads in a normal browser without a login before trying again.
+        {paid ? (
+          <>
+            {" "}
+            Refund questions?{" "}
+            <a href={`mailto:${CONTACT_EMAIL}`} className="link">
+              {CONTACT_EMAIL}
+            </a>
+          </>
+        ) : null}
       </p>
     </>
   );

@@ -34,7 +34,23 @@ export class CrawlError extends Schema.TaggedError<CrawlError>()("CrawlError", {
   url: Schema.String,
   reason: CrawlFailureReason,
   message: Schema.String,
+  /** The HTTP status, for `reason: "http"`. */
+  status: Schema.optional(Schema.Number),
 }) {}
+
+/** HTTP statuses that usually mean "try again later" rather than "no". */
+const TRANSIENT_HTTP = new Set([408, 425, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527, 529, 530]);
+
+/**
+ * Worth another try later: timeouts, dropped connections, DNS hiccups (the
+ * site resolved at submit time) and "busy" statuses. A 403, a 404, a non-HTML
+ * page or a redirect off-site won't change by waiting.
+ */
+export const isTransientCrawlError = (error: CrawlError): boolean =>
+  error.reason === "timeout" ||
+  error.reason === "unreachable" ||
+  error.reason === "dns" ||
+  (error.reason === "http" && error.status !== undefined && TRANSIENT_HTTP.has(error.status));
 
 export const JudgeFailureReason = Schema.Literals([
   "refused", // model declined (stop_reason refusal)

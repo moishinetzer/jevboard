@@ -15,6 +15,7 @@ import { type AutumnClientOptions, AutumnError, decodeReply, makeAutumnClient } 
  *
  *   createCheckout: customers.get_or_create → billing.attach(redirect_mode: "always") → Stripe Checkout URL
  *   confirm:        customers.get (HTTP 200 + granted >= 1) → balances.track(Idempotency-Key: consume:<orderId>)
+ *   refund:         customers.get(expand: invoices) → customers/<id>/invoices/<stripe_id>/refund (full)
  *
  * `confirm` fails closed: only a 200 from `customers.get` showing the grant
  * counts as paid. Anything unexpected is a `PaymentError`, never "paid".
@@ -67,6 +68,17 @@ const AttachBody = Schema.Struct({
   required_action: Schema.optional(Schema.Unknown),
 });
 const InvoiceStatus = Schema.Struct({ status: Schema.String });
+/** One entry of `invoices` in customers.get with `expand: ["invoices"]`. */
+const CustomerInvoice = Schema.Struct({
+  stripe_id: Schema.String,
+  status: Schema.optional(Schema.NullOr(Schema.String)),
+  plan_ids: Schema.optional(Schema.NullOr(Schema.Array(Schema.String))),
+});
+const decodeInvoice = Schema.decodeUnknownOption(CustomerInvoice);
+const CustomerWithInvoices = Schema.Struct({
+  id: Schema.optional(Schema.NullOr(Schema.String)),
+  invoices: Schema.optional(Schema.NullOr(Schema.Array(Schema.Unknown))),
+});
 const RequiredActionCode = Schema.Struct({ code: Schema.String });
 
 const truncate = (text: string, max: number): string => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
@@ -272,7 +284,72 @@ export const makeAutumnPayments = Effect.fnUntraced(function* (options: AutumnPa
     (effect) => effect.pipe(Effect.catchTag("AutumnError", toPaymentError("confirm"))),
   );
 
-  return Payments.of({ kind: "autumn", createCheckout, confirm });
+  /**
+   * Refunds the order's $5 in full. Autumn's `billing.update` refunds only
+   * subscriptions, so this refunds the purchase's Stripe invoice directly:
+   *
+   *   customers.get(expand: invoices) → POST customers/<id>/invoices/<stripe_id>/refund
+   *
+   * The Idempotency-Key is fixed per order and invoice, so a repeat (a cron
+   * retry after a lost reply) answers 409 instead of refunding twice.
+   */
+  const refund = Effect.fn("AutumnPayments.refund")(
+    function* (input: { readonly orderId: string; readonly reason: string }) {
+      const customerId = yield* customerIdFor(input.orderId);
+      yield* Effect.annotateCurrentSpan({ "order.id": input.orderId, "autumn.customer": customerId });
+      const reply = yield* autumn.post("customers.get", { customer_id: customerId, expand: ["invoices"] }).pipe(
+        Effect.map(Option.some),
+        Effect.catchTag("AutumnError", (error) =>
+          error.status === 404 && error.code === "customer_not_found" ? Effect.succeedNone : Effect.fail(error),
+        ),
+      );
+      if (Option.isNone(reply)) return "nothing_to_refund" as const;
+      if (reply.value.status !== 200) {
+        return yield* new AutumnError({
+          endpoint: "customers.get",
+          status: reply.value.status,
+          message: "Expected HTTP 200 from customers.get",
+        });
+      }
+      const customer = yield* decodeReply(CustomerWithInvoices, "customers.get")(reply.value);
+      if (customer.id && customer.id !== customerId) {
+        return yield* new AutumnError({
+          endpoint: "customers.get",
+          status: 200,
+          message: "Autumn returned a different customer than requested",
+        });
+      }
+      const paid = (customer.invoices ?? []).flatMap((item) => {
+        const invoice = decodeInvoice(item);
+        return Option.isSome(invoice) &&
+          invoice.value.status === "paid" &&
+          (invoice.value.plan_ids ?? []).includes(options.planId)
+          ? [invoice.value]
+          : [];
+      });
+      if (paid.length === 0) return "nothing_to_refund" as const;
+
+      for (const invoice of paid) {
+        yield* autumn
+          .post(
+            `customers/${encodeURIComponent(customerId)}/invoices/${encodeURIComponent(invoice.stripe_id)}/refund`,
+            { mode: "full", reason: input.reason.slice(0, 200) },
+            { idempotencyKey: `refund:${input.orderId}:${invoice.stripe_id}` },
+          )
+          .pipe(
+            Effect.catchTag("AutumnError", (error) =>
+              error.status === 409 && error.code === "duplicate_idempotency_key"
+                ? Effect.logInfo("Autumn refund: already requested", { orderId: input.orderId })
+                : Effect.fail(error),
+            ),
+          );
+      }
+      return "refunded" as const;
+    },
+    (effect) => effect.pipe(Effect.catchTag("AutumnError", toPaymentError("refund"))),
+  );
+
+  return Payments.of({ kind: "autumn", createCheckout, confirm, refund });
 });
 
 /** Autumn payments over a caller-supplied `HttpClient` (tests pass a fake one). */

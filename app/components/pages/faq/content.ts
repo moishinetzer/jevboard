@@ -57,7 +57,8 @@ export const FAQ: ReadonlyArray<FaqItem> = [
   {
     id: "cant-reach",
     question: "What if Jev can't reach my site?",
-    answer: "That isn't a verdict. Nothing lands on the board and your retry is free.",
+    answer:
+      "Jev tries again for a few minutes first. If your site still won't answer, that isn't a verdict: nothing lands on the board and your $5 is refunded automatically.",
   },
   {
     id: "trick-jev",

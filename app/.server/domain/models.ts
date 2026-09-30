@@ -37,7 +37,7 @@ export interface Order {
   readonly url: string;
   readonly kind: OrderKind;
   readonly status: OrderStatus;
-  /** Human readable progress line, e.g. "Duel 2 of 3: vs acme.com". */
+  /** Human readable progress line, e.g. "Jev is knocking on acme.com…". */
   readonly stageDetail: string | null;
   readonly error: string | null;
   readonly amountCents: number;
@@ -47,7 +47,12 @@ export interface Order {
   readonly paidAt: number | null;
   readonly completedAt: number | null;
   readonly updatedAt: number;
+  /** "due" once a paid order failed, "done" when the refund went through. */
+  readonly refundState: RefundState | null;
+  readonly refundedAt: number | null;
 }
+
+export type RefundState = "due" | "done";
 
 // ---------------------------------------------------------------------------
 // Crawling

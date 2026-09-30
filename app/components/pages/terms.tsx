@@ -37,9 +37,9 @@ export const CLAUSES: ReadonlyArray<Clause> = [
   },
   {
     id: "refunds",
-    title: "If Jev can't reach your site",
-    gist: "A delivered verdict is final. A failed crawl retries for free.",
-    body: "Once an evaluation is delivered it is final, whatever the result. If we can't reach the site (it's down, times out or blocks our crawler), no verdict is recorded and you can retry without paying again. If we can't deliver at all, contact us and we'll make it right.",
+    title: "If Jev can't judge your site",
+    gist: "A delivered verdict is final. No verdict, no charge.",
+    body: "Once an evaluation is delivered it is final, whatever the result. If we can't reach the site after several attempts (it's down, times out or blocks our crawler), or can't finish the evaluation for any other reason, no verdict is recorded and we refund your payment in full automatically. Refunds usually reach your card within 5 to 10 business days. If one doesn't, contact us and we'll make it right.",
   },
   {
     id: "what-you-submit",

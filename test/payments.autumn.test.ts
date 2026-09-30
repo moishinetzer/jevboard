@@ -466,3 +466,102 @@ describe("AutumnPayments.confirm", () => {
     }),
   );
 });
+
+describe("AutumnPayments.refund", () => {
+  const INVOICE = "in_1ULNh1G2wleIbAUgmCqcrieo";
+  const REFUND_PATH = `/v1/customers/${CUSTOMER}/invoices/${INVOICE}/refund`;
+  const refund = (fake: ReturnType<typeof fakeAutumn>) =>
+    withPayments(fake, (payments) => payments.refund({ orderId: ORDER, reason: "Your site kept timing out." }));
+
+  const invoice = (fields: Record<string, unknown> = {}) => ({
+    plan_ids: ["judgment"],
+    stripe_id: INVOICE,
+    processor_type: "stripe",
+    status: "paid",
+    total: 5,
+    currency: "usd",
+    created_at: 1790775427000,
+    ...fields,
+  });
+
+  it.effect("refunds the plan's paid invoice in full under an idempotency key", () =>
+    Effect.gen(function* () {
+      const fake = fakeAutumn((call) =>
+        call.path === "/v1/customers.get"
+          ? { status: 200, body: customer({ ...paidCustomer, invoices: [invoice()] }) }
+          : { status: 200, body: { success: true } },
+      );
+      assert.strictEqual(yield* refund(fake), "refunded");
+      assert.deepStrictEqual(
+        fake.calls.map((call) => call.path),
+        ["/v1/customers.get", REFUND_PATH],
+      );
+      assert.deepStrictEqual(fake.calls[0]!.body, { customer_id: CUSTOMER, expand: ["invoices"] });
+      const call = fake.calls[1]!;
+      assertAutumnHeaders(call);
+      assert.strictEqual(call.headers["idempotency-key"], `refund:${ORDER}:${INVOICE}`);
+      assert.deepStrictEqual(call.body, { mode: "full", reason: "Your site kept timing out." });
+    }),
+  );
+
+  it.effect("a repeated refund (409 duplicate_idempotency_key) is refunded, not an error", () =>
+    Effect.gen(function* () {
+      const fake = fakeAutumn((call) =>
+        call.path === "/v1/customers.get"
+          ? { status: 200, body: customer({ invoices: [invoice()] }) }
+          : { status: 409, body: { message: "Duplicate idempotency key", code: "duplicate_idempotency_key" } },
+      );
+      assert.strictEqual(yield* refund(fake), "refunded");
+    }),
+  );
+
+  it.effect("no paid invoice for the plan, or no customer at all, is nothing to refund", () =>
+    Effect.gen(function* () {
+      const unpaid = fakeAutumn(() => ({
+        status: 200,
+        body: customer({ invoices: [invoice({ status: "open" }), invoice({ plan_ids: ["other"] })] }),
+      }));
+      assert.strictEqual(yield* refund(unpaid), "nothing_to_refund");
+      assert.deepStrictEqual(
+        unpaid.calls.map((call) => call.path),
+        ["/v1/customers.get"],
+      );
+
+      const missing = fakeAutumn(() => ({
+        status: 404,
+        body: { message: "Customer not found", code: "customer_not_found" },
+      }));
+      assert.strictEqual(yield* refund(missing), "nothing_to_refund");
+    }),
+  );
+
+  it.effect("a refund Stripe rejects is a PaymentError (the cron tries again later)", () =>
+    Effect.gen(function* () {
+      const fake = fakeAutumn((call) =>
+        call.path === "/v1/customers.get"
+          ? { status: 200, body: customer({ invoices: [invoice()] }) }
+          : { status: 400, body: { message: "This charge is not eligible for a refund", code: "invalid_request" } },
+      );
+      const error = yield* Effect.flip(refund(fake));
+      assert.strictEqual(error._tag, "PaymentError");
+      assert.strictEqual(error.status, 400);
+      assert.notInclude(error.message, SECRET);
+    }),
+  );
+
+  it.effect("retries a 5xx refund with the same idempotency key", () =>
+    Effect.gen(function* () {
+      const fake = fakeAutumn((call, previous) =>
+        call.path === "/v1/customers.get"
+          ? { status: 200, body: customer({ invoices: [invoice()] }) }
+          : previous.some((p) => p.path === REFUND_PATH)
+            ? { status: 200, body: { success: true } }
+            : { status: 503, body: { message: "Busy" } },
+      );
+      assert.strictEqual(yield* refund(fake), "refunded");
+      const refunds = fake.calls.filter((call) => call.path === REFUND_PATH);
+      assert.strictEqual(refunds.length, 2);
+      assert.isTrue(refunds.every((call) => call.headers["idempotency-key"] === `refund:${ORDER}:${INVOICE}`));
+    }),
+  );
+});

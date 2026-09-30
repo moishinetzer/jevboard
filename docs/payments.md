@@ -26,6 +26,21 @@ are stored in that customer's `metadata`. Orders can't share credits or cancel e
 
 The code is in `app/.server/services/payments/` (`AutumnClient.ts`, `AutumnPayments.ts`, `webhook.ts`).
 
+## Refunds
+
+A paid order that ends without a verdict is refunded automatically, in full. Autumn's `billing.update`
+refund options only apply to subscriptions, so for our one-off plan the refund goes to the purchase's
+Stripe invoice:
+
+1. `customers.get` with `expand: ["invoices"]` finds the order customer's paid invoice for the plan.
+2. `POST /v1/customers/<customer_id>/invoices/<stripe_invoice_id>/refund` with `{ "mode": "full" }` and the
+   header `Idempotency-Key: refund:<orderId>:<invoice>`. A repeat answers 409 `duplicate_idempotency_key`,
+   which counts as refunded, so the buyer is never refunded twice.
+
+This route isn't in Autumn's public API reference (it's the one the dashboard uses), so check it in the
+sandbox before going live, and keep an eye on "Refund still failing" in the logs: those orders stay
+`refund_state = 'due'` and the cron keeps trying.
+
 ## Setup
 
 ### 1. Create the feature and the plan

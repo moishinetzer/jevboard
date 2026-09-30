@@ -25,12 +25,20 @@ export interface FetchedPage {
   readonly truncated: boolean;
 }
 
+/** The HTTP client: `fetch`'s shape. */
+export type HttpFetch = (url: URL, init: RequestInit) => Promise<Response>;
+
 export interface PageFetcherOptions {
   readonly userAgent: string;
   /** Used for every hop unless `allowPrivateNetwork` is set. */
   readonly resolve: Resolver;
   /** TEST ONLY: skip the host/port rules and the address check. */
   readonly allowPrivateNetwork: boolean;
+  /**
+   * Sends one request. Default: the global `fetch`. Tests pass a scripted
+   * one; the SSRF guard runs before it either way.
+   */
+  readonly fetch?: HttpFetch;
 }
 
 // ---------------------------------------------------------------------------
@@ -89,9 +97,14 @@ const readCapped = async (
   }
 };
 
-const sendHop = async (url: URL, headers: Record<string, string>, signal: AbortSignal): Promise<Hop> => {
+const sendHop = async (
+  send: HttpFetch,
+  url: URL,
+  headers: Record<string, string>,
+  signal: AbortSignal,
+): Promise<Hop> => {
   // `redirect: "manual"` hands us the 3xx itself (Node and workerd; not browsers).
-  const response = await fetch(url, { method: "GET", headers, redirect: "manual", signal });
+  const response = await send(url, { method: "GET", headers, redirect: "manual", signal });
   const status = response.status;
   if (REDIRECT_STATUSES.has(status)) {
     discard(response);
@@ -132,12 +145,17 @@ const errorChain = (error: unknown): Array<ErrorLike> => {
 
 const DNS_CODES = new Set(["ENOTFOUND", "ENODATA", "EAI_FAIL", "EAI_NONAME"]);
 const TIMEOUT_CODES = new Set(["ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT"]);
+/** Node's certificate and handshake codes (CERT_HAS_EXPIRED, ERR_TLS_CERT_ALTNAME_INVALID, ERR_SSL_...). */
+const TLS_CODE = /CERT|SSL|TLS|SELF_SIGNED|UNABLE_TO_VERIFY|UNABLE_TO_GET_ISSUER/;
+/** workerd has no codes, only messages. */
+const TLS_MESSAGE = /certificate|\bTLS\b|\bSSL\b/i;
+/** Prefix of every TLS failure's message; `isTlsCrawlError` relies on it. */
+const TLS_FAILURE = "TLS/certificate error";
 
 const describeCode = (code: string): string => {
   if (code === "ECONNREFUSED") return "connection refused";
   if (code === "ECONNRESET" || code === "UND_ERR_SOCKET") return "connection reset";
   if (code === "EHOSTUNREACH" || code === "ENETUNREACH") return "host unreachable";
-  if (/CERT|SSL|TLS|SELF_SIGNED|UNABLE_TO_VERIFY/.test(code)) return `TLS/certificate error (${code})`;
   return `network error (${code})`;
 };
 
@@ -151,9 +169,28 @@ const transportError = (url: string, cause: unknown): CrawlError => {
   if (codes.some((code) => TIMEOUT_CODES.has(code))) {
     return new CrawlError({ url, reason: "timeout", message: "the server took too long to respond" });
   }
+  // A reset mid-handshake ("... before secure TLS connection was established") has a code and stays a reset.
+  const tlsCode = codes.find((code) => TLS_CODE.test(code));
+  const tlsMessage =
+    codes.length === 0 && chain.some((error) => typeof error.message === "string" && TLS_MESSAGE.test(error.message));
+  if (tlsCode !== undefined || tlsMessage) {
+    return new CrawlError({
+      url,
+      reason: "unreachable",
+      message: tlsCode !== undefined ? `${TLS_FAILURE} (${tlsCode})` : TLS_FAILURE,
+    });
+  }
   const detail = codes[0] !== undefined ? describeCode(codes[0]) : String(chain.at(-1)?.message ?? "network error");
   return new CrawlError({ url, reason: "unreachable", message: detail.slice(0, 200) });
 };
+
+/**
+ * The address answered, but not over valid TLS (bad or expired certificate,
+ * failed handshake). Asking the same address again won't help; another
+ * address (www, plain http) might.
+ */
+export const isTlsCrawlError = (error: CrawlError): boolean =>
+  error.reason === "unreachable" && error.message.startsWith(TLS_FAILURE);
 
 const parseUrl = (href: string, base?: URL): URL | undefined => {
   try {
@@ -173,9 +210,11 @@ const parseUrl = (href: string, base?: URL): URL | undefined => {
  * Builds `fetchPage(url, timeout)`: GETs an HTML page, following up to
  * `MAX_REDIRECTS` redirects by hand so every hop goes through the SSRF guard
  * again. The whole chain (DNS checks included) shares one deadline. Failures
- * are `CrawlError`s whose `url` is always the URL that was asked for.
+ * are `CrawlError`s whose `url` is always the URL that was asked for; HTTP
+ * failures carry the `status`. One attempt only: retrying is the caller's call.
  */
 export const makePageFetcher = (options: PageFetcherOptions) => {
+  const send: HttpFetch = options.fetch ?? ((url, init) => fetch(url, init));
   const headers = {
     "user-agent": options.userAgent,
     accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5",
@@ -186,6 +225,8 @@ export const makePageFetcher = (options: PageFetcherOptions) => {
     function* (requestedUrl: string, _timeout: Duration.Input) {
       const fail = (reason: CrawlError["reason"], message: string) =>
         Effect.fail(new CrawlError({ url: requestedUrl, reason, message }));
+      const failHttp = (status: number, message: string) =>
+        Effect.fail(new CrawlError({ url: requestedUrl, reason: "http", message, status }));
 
       let url = parseUrl(requestedUrl);
       if (url === undefined) return yield* fail("blocked", "not a valid URL");
@@ -199,19 +240,19 @@ export const makePageFetcher = (options: PageFetcherOptions) => {
 
         const target = url;
         const hop = yield* Effect.tryPromise({
-          try: (signal) => sendHop(target, headers, signal),
+          try: (signal) => sendHop(send, target, headers, signal),
           catch: (cause) => transportError(requestedUrl, cause),
         });
         switch (hop._tag) {
           case "Redirect": {
-            if (hop.location === undefined) return yield* fail("http", `HTTP ${hop.status} without a Location`);
-            if (redirects >= MAX_REDIRECTS) return yield* fail("http", `more than ${MAX_REDIRECTS} redirects`);
+            if (hop.location === undefined) return yield* failHttp(hop.status, `HTTP ${hop.status} without a Location`);
+            if (redirects >= MAX_REDIRECTS) return yield* failHttp(hop.status, `more than ${MAX_REDIRECTS} redirects`);
             url = parseUrl(hop.location, url);
-            if (url === undefined) return yield* fail("http", `HTTP ${hop.status} to an invalid Location`);
+            if (url === undefined) return yield* failHttp(hop.status, `HTTP ${hop.status} to an invalid Location`);
             continue;
           }
           case "Status":
-            return yield* fail("http", `HTTP ${hop.status}`);
+            return yield* failHttp(hop.status, `HTTP ${hop.status}`);
           case "NotHtml":
             return yield* fail("not-html", `expected an HTML page, got ${hop.contentType}`);
           case "Body": {

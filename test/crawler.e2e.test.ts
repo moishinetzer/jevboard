@@ -22,6 +22,8 @@ import { makeDohResolver, type Resolver } from "~/.server/services/crawler/ssrf"
 
 const requests: Array<{ readonly path: string; readonly headers: IncomingHttpHeaders }> = [];
 const hits = (path: string) => requests.filter((request) => request.path === path).length;
+/** Inside a route: true while serving the first request for `path` (requests are logged before routing). */
+const firstHit = (path: string) => hits(path) === 1;
 
 const HUGE_TOTAL_BYTES = 32_000_000;
 let hugeBytesSent = 0;
@@ -152,6 +154,27 @@ const server = createServer((req, res) => {
     }
     case "/slow":
       return; // never answers
+    case "/sluggish":
+      // Answers, but slower than a first attempt is allowed to wait.
+      return void setTimeout(() => {
+        if (!res.destroyed) html(res, "<title>Sluggish</title><p>Worth the wait.</p>");
+      }, 300);
+    case "/busy":
+      return firstHit("/busy")
+        ? send(res, 503, { "content-type": "text/html", "retry-after": "1" }, "busy")
+        : html(res, `<title>Busy Acme</title><a href="/busy/pricing">Pricing</a>`);
+    case "/busy/pricing":
+      return firstHit("/busy/pricing")
+        ? send(res, 503, { "content-type": "text/html" }, "busy")
+        : html(res, "<title>Busy pricing</title><p>$5 when we're free.</p>");
+    case "/forbidden":
+      return send(res, 403, { "content-type": "text/html" }, "no bots");
+    case "/patient":
+      return html(res, `<title>Patient</title><a href="/patient/pricing">Pricing</a> <a href="/patient/about">About</a>`);
+    case "/patient/about":
+      return html(res, "<title>About</title><p>We take our time.</p>");
+    case "/patient/pricing":
+      return; // never answers
     default:
       return send(res, 404, {});
   }
@@ -179,7 +202,14 @@ afterAll(
 // Helpers
 // ---------------------------------------------------------------------------
 
-const localOptions: CrawlerOptions = { userAgent: "JevBot/test", allowPrivateNetwork: true, pageTimeout: "5 seconds" };
+/** The real retry policy, with short timeouts and backoffs. */
+const fastRetries = {
+  homeTimeouts: ["5 seconds", "5 seconds", "5 seconds"],
+  pageTimeout: "5 seconds",
+  retryBackoff: "5 millis",
+  quickRetryBackoff: "5 millis",
+} satisfies Partial<CrawlerOptions>;
+const localOptions: CrawlerOptions = { userAgent: "JevBot/test", allowPrivateNetwork: true, ...fastRetries };
 const local = (options: Partial<CrawlerOptions> = {}) => crawlerLayer({ ...localOptions, ...options });
 
 /** Fake DNS for the default (guarded) crawler; nothing here ever reaches the network. */
@@ -286,7 +316,10 @@ describe("crawl (local server, private network allowed)", () => {
       const missing = yield* crawlError(crawler.crawl(`${base}/missing`));
       assert.strictEqual(missing.reason, "http");
       assert.strictEqual(missing.message, "HTTP 404");
-      assert.strictEqual((yield* crawlError(crawler.preflight(`${base}/features`))).message, "HTTP 500");
+      assert.strictEqual(missing.status, 404);
+      const broken = yield* crawlError(crawler.preflight(`${base}/features`));
+      assert.strictEqual(broken.message, "HTTP 500");
+      assert.strictEqual(broken.status, 500);
       assert.strictEqual((yield* crawlError(crawler.crawl(`${base}/json`))).reason, "not-html");
       assert.strictEqual((yield* crawlError(crawler.crawl(`${base}/untyped-binary`))).reason, "not-html");
       assert.strictEqual((yield* crawler.crawl(`${base}/untyped-html`)).title, "Untyped");
@@ -329,7 +362,85 @@ describe("crawl (local server, private network allowed)", () => {
       const slow = yield* crawlError(crawler.crawl(`${base}/slow`));
       assert.strictEqual(slow.reason, "timeout");
       assert.strictEqual((yield* crawlError(crawler.preflight(`${base}/slow`))).reason, "timeout");
-    }).pipe(Effect.provide(local({ pageTimeout: "300 millis", preflightTimeout: "300 millis" }))),
+    }).pipe(
+      Effect.provide(
+        local({ homeTimeouts: ["100 millis", "200 millis"], pageTimeout: "300 millis", preflightTimeout: "300 millis" }),
+      ),
+    ),
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Patience: retries and the ceiling
+// ---------------------------------------------------------------------------
+
+describe("crawl retries (local server)", () => {
+  it.live("gives a slow homepage longer on each attempt", () =>
+    Effect.gen(function* () {
+      const crawler = yield* Crawler;
+      const before = hits("/sluggish");
+      // 100 ms is too short for a 300 ms answer; the second attempt waits 2 s.
+      const snapshot = yield* crawler.crawl(`${base}/sluggish`);
+      assert.strictEqual(snapshot.title, "Sluggish");
+      assert.strictEqual(hits("/sluggish") - before, 2);
+    }).pipe(Effect.provide(local({ homeTimeouts: ["100 millis", "2 seconds"] }))),
+  );
+
+  it.live("retries a busy homepage and a busy extra page", () =>
+    Effect.gen(function* () {
+      const crawler = yield* Crawler;
+      const snapshot = yield* crawler.crawl(`${base}/busy`);
+      assert.strictEqual(snapshot.title, "Busy Acme");
+      assert.deepStrictEqual(
+        snapshot.pages.map((page) => page.url),
+        [`${base}/busy`, `${base}/busy/pricing`],
+      );
+      assert.strictEqual(hits("/busy"), 2);
+      assert.strictEqual(hits("/busy/pricing"), 2);
+    }).pipe(Effect.provide(local())),
+  );
+
+  it.live("takes a 403 as a no: one request, no retry", () =>
+    Effect.gen(function* () {
+      const crawler = yield* Crawler;
+      const before = hits("/forbidden");
+      const crawled = yield* crawlError(crawler.crawl(`${base}/forbidden`));
+      assert.strictEqual(crawled.reason, "http");
+      assert.strictEqual(crawled.status, 403);
+      assert.strictEqual(hits("/forbidden") - before, 1);
+      assert.strictEqual((yield* crawlError(crawler.preflight(`${base}/forbidden`))).status, 403);
+      assert.strictEqual(hits("/forbidden") - before, 2);
+    }).pipe(Effect.provide(local())),
+  );
+
+  it.live("stops at the ceiling however patient the attempts are", () =>
+    Effect.gen(function* () {
+      const crawler = yield* Crawler;
+      const started = Date.now();
+      const crawled = yield* crawlError(crawler.crawl(`${base}/slow`));
+      assert.strictEqual(crawled.reason, "timeout");
+      assert.strictEqual(crawled.url, `${base}/slow`);
+      assert.strictEqual(crawled.message, "the crawl did not finish within 300ms");
+      const checked = yield* crawlError(crawler.preflight(`${base}/slow`));
+      assert.strictEqual(checked.reason, "timeout");
+      assert.strictEqual(checked.message, "the site check did not finish within 200ms");
+      assert.isBelow(Date.now() - started, 2_000);
+    }).pipe(Effect.provide(local({ crawlCeiling: "300 millis", preflightCeiling: "200 millis" }))),
+  );
+
+  it.live("near the ceiling, a slow extra page is skipped rather than failing the crawl", () =>
+    Effect.gen(function* () {
+      const crawler = yield* Crawler;
+      const started = Date.now();
+      // 1.5 s ceiling, 1 s of slack: the extra pages get 0.5 s, less than /patient/pricing takes.
+      const snapshot = yield* crawler.crawl(`${base}/patient`);
+      assert.deepStrictEqual(
+        snapshot.pages.map((page) => page.url),
+        [`${base}/patient`, `${base}/patient/about`],
+      );
+      assert.strictEqual(hits("/patient/pricing"), 1);
+      assert.isBelow(Date.now() - started, 1_400);
+    }).pipe(Effect.provide(local({ crawlCeiling: "1500 millis" }))),
   );
 });
 
@@ -368,6 +479,7 @@ describe("SSRF guard (default crawler)", () => {
       Effect.provide(
         crawlerLayer({
           userAgent: "JevBot/test",
+          ...fastRetries,
           resolve: fakeResolver({
             "rebind.jevtest.com": ["93.184.216.34", "10.0.0.1"],
             "mapped.jevtest.com": ["::ffff:127.0.0.1"],
@@ -387,7 +499,7 @@ describe("SSRF guard (default crawler)", () => {
     }).pipe(
       Effect.provide(
         Layer.suspend(() =>
-          crawlerLayer({ userAgent: "JevBot/test", resolve: makeDohResolver({ endpoint: `${base}/dns-query` }) }),
+          crawlerLayer({ userAgent: "JevBot/test", ...fastRetries, resolve: makeDohResolver({ endpoint: `${base}/dns-query` }) }),
         ),
       ),
     ),

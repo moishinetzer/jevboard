@@ -41,7 +41,12 @@ submit URL ─▶ validate + reachability preflight ─▶ order (pending_paymen
 ```
 
 - **Crawling.** Our SSRF-safe crawler fetches the homepage plus up to three informative pages (about, pricing,
-  product…). That snapshot is all Jev reads; every roll crawls the site again.
+  product…). That snapshot is all Jev reads; every roll crawls the site again. Slow or flaky sites get patient
+  retries (longer timeouts, the www/non-www and http siblings of the address); a site that still isn't
+  answering goes back to the queue with a growing delay (30 s, 1, 2, 4 minutes).
+- **Refunds.** A paid judgment that ends without a verdict (a site that says no, or keeps failing after every
+  retry) is refunded in full automatically. `orders.refund_state` is the outbox: `due` when the order fails,
+  `done` once Autumn accepts the refund, and the cron retries anything still due.
 - **Judging.** One structured-output call through [OpenRouter](https://openrouter.ai) (`JEV_MODEL`, default
   `openai/gpt-6-luna`, about $0.0005 per judgment) produces the score, TL;DR, roast,
   sub-scores, strengths/weaknesses and verbatim "receipts". Website content is treated as untrusted: attempts
@@ -55,7 +60,7 @@ submit URL ─▶ validate + reachability preflight ─▶ order (pending_paymen
 - **Durability.** The order row is the state machine (`pending_payment → paid → crawling → judging →
   tiebreaking → complete | failed`) and Jev's verdict is parked on it between the two queue stages, so both
   stages are idempotent under at-least-once delivery. A cron trigger (every minute) confirms payments for
-  buyers who closed the tab and re-queues stalled judgments; a failed paid judgment can be retried for free.
+  buyers who closed the tab, re-queues stalled judgments and retries refunds that didn't go through.
 
 ## Architecture
 

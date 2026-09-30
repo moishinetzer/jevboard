@@ -227,6 +227,8 @@ describe("handleAutumnWebhook", () => {
     paidAt: null,
     completedAt: null,
     updatedAt: NOW_MS - 60_000,
+    refundState: null,
+    refundedAt: null,
   });
 
   const autumnConfig = (webhookSecret: Option.Option<Redacted.Redacted<string>>) =>
