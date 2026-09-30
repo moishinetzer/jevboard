@@ -18,14 +18,13 @@ export type BoardPageData = BoardData;
 export function BoardPage({ data }: { data: BoardPageData }) {
   const { listing, open } = data;
   const closeHref = boardHref(listing.page);
-  const weekViews = data.boardViews.slice(-7).reduce((sum, day) => sum + day.views, 0);
   const days = data.boardViews.map((day) => day.day);
 
   useEffect(() => rememberBoard(data), [data]);
 
   return (
     <>
-      <HomeHeader weekViews={weekViews} />
+      <HomeHeader views={data.totalViews} />
       <main className="flex w-full flex-col items-center px-4">
         <Notices data={data} />
 

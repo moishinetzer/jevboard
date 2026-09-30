@@ -46,7 +46,7 @@ export const loadBoard = Effect.fn("loadBoard")(function* (openSiteKey: string |
     [
       board.reasoning(listing.entries.map((entry) => entry.id)),
       views.dailyMany(siteKeys, VIEW_DAYS),
-      views.allTime(siteKeys),
+      views.allTime([...siteKeys, BOARD_VIEWS]),
       orders.paidSites(current.visitorId),
     ],
     { concurrency: "unbounded" },
@@ -80,6 +80,8 @@ export const loadBoard = Effect.fn("loadBoard")(function* (openSiteKey: string |
   return {
     listing,
     boardViews,
+    /** Every view the board has had (the header's "Live" pill). */
+    totalViews: totalViews.get(BOARD_VIEWS) ?? 0,
     /** What each listed business shows when opened, by site key. */
     rows,
     /** The business opened in place (/s/<site>), if any. */

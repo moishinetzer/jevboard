@@ -2,21 +2,22 @@ import { Link } from "react-router";
 import { formatCount } from "~/lib/format";
 import { JevFace, Wordmark } from "./logo";
 
-/** Below this many views in a week, the "Live" pill stays hidden rather than look lonely. */
+/** Below this many views, the "Live" pill stays hidden rather than look lonely. */
 const LIVE_PILL_MIN_VIEWS = 25;
 
 /** The board's header: the logo, centred, and a quiet "Live" pill once people are looking. */
-export function HomeHeader({ weekViews }: { weekViews: number }) {
+export function HomeHeader({ views }: { views: number }) {
   return (
     <header className="flex flex-col items-center gap-3 px-4 pt-7 sm:gap-3.5 sm:pt-10">
       <Link to="/" aria-label="Ranked by Jev home" className="flex items-center gap-2 text-ink">
         <JevFace size={34} label="" className="size-7 sm:size-[34px]" />
         <Wordmark className="text-[25px] sm:text-[30px]" />
       </Link>
-      {weekViews >= LIVE_PILL_MIN_VIEWS ? (
+      {views >= LIVE_PILL_MIN_VIEWS ? (
         <p className="flex items-center gap-2 rounded-full bg-pill py-1 pr-3 pl-1.5 text-xs text-soft sm:text-[13px]">
           <span className="rounded-full bg-jev px-2 py-0.5 text-[10px] font-bold text-on-jev sm:text-[11px]">Live</span>
-          <span>{formatCount(weekViews)} views this week</span>
+          {/* All-time views, labelled "this week": the site runs as a one-week launch. */}
+          <span>{formatCount(views)} views this week</span>
           <span aria-hidden className="hidden sm:inline">
             ·
           </span>
