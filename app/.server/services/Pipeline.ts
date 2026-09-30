@@ -226,14 +226,13 @@ export class Pipeline extends Context.Service<
             url: order.url,
             snapshot,
             roll,
-            fresh: roll > 1,
           });
           const staged = yield* orders.stageVerdict(
             orderId,
             {
               verdict: result.verdict,
               model: result.model,
-              pagesCrawled: [...new Set([...snapshot.pages.map((page) => page.url), ...result.pagesFetchedByJev])],
+              pagesCrawled: snapshot.pages.map((page) => page.url),
               ogImage: snapshot.ogImage,
             },
             token,

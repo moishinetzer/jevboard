@@ -1,15 +1,15 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Option, Redacted } from "effect";
-import { AppConfig } from "~/.server/config";
+import { AppConfig, DEFAULT_MODEL } from "~/.server/config";
 import type { SiteSnapshot } from "~/.server/domain/models";
 import { Judge } from "~/.server/services/Judge";
-import { ClaudeJudgeLive } from "~/.server/services/judge/ClaudeJudge";
+import { OpenRouterJudgeLive } from "~/.server/services/judge/OpenRouterJudge";
 
 /**
- * Real calls to the Claude API. Skipped unless ANTHROPIC_API_KEY is set:
- *   ANTHROPIC_API_KEY=sk-... npx vitest run test/judge.live.test.ts
+ * Real calls through OpenRouter. Skipped unless OPENROUTER_API_KEY is set:
+ *   OPENROUTER_API_KEY=sk-or-... JEV_MODEL=<openrouter id> pnpm vitest run test/judge.live.test.ts
  */
-const apiKey = process.env["ANTHROPIC_API_KEY"];
+const apiKey = process.env["OPENROUTER_API_KEY"];
 
 const snapshot: SiteSnapshot = {
   requestedUrl: "https://www.openstreetmap.org",
@@ -31,12 +31,12 @@ const snapshot: SiteSnapshot = {
   fetchedAt: Date.now(),
 };
 
-const layer = ClaudeJudgeLive.pipe(
+const layer = OpenRouterJudgeLive.pipe(
   Layer.provide(
     AppConfig.layerTest({
-      anthropic: Option.some({
+      openrouter: Option.some({
         apiKey: Redacted.make(apiKey ?? ""),
-        model: process.env["JEV_MODEL"] ?? "claude-opus-5-5",
+        model: process.env["JEV_MODEL"] ?? DEFAULT_MODEL,
         judgeEffort: "low",
         duelEffort: "low",
       }),
@@ -44,7 +44,7 @@ const layer = ClaudeJudgeLive.pipe(
   ),
 );
 
-describe.skipIf(!apiKey)("ClaudeJudge (live API)", () => {
+describe.skipIf(!apiKey)("OpenRouterJudge (live API)", () => {
   it.live(
     "judges a real site end to end",
     () =>
@@ -55,14 +55,13 @@ describe.skipIf(!apiKey)("ClaudeJudge (live API)", () => {
           url: "https://www.openstreetmap.org",
           snapshot,
           roll: 1,
-          fresh: true,
         });
         console.log(JSON.stringify(result, null, 2));
         expect(result.verdict.score).toBeGreaterThan(700);
         expect(result.verdict.contentFlag).toBe("none");
         expect(result.verdict.label).toMatch(/^[a-z0-9]+(-[a-z0-9]+)+$/);
       }).pipe(Effect.provide(layer)),
-    600_000,
+    300_000,
   );
 
   it.live(

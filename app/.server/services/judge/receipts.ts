@@ -1,10 +1,9 @@
-import type { BetaMessage } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import type { SiteSnapshot } from "../../domain/models";
 
 /**
  * Receipts are published as verbatim quotes from the site, so a quote Jev
- * can't back up with text it actually read (the crawler snapshot or a page it
- * fetched itself) is dropped rather than attributed to a real business.
+ * can't back up with text it actually read (the crawler snapshot) is dropped
+ * rather than attributed to a real business.
  *
  * Matching is forgiving about typography (case, whitespace, curly quotes,
  * dashes, surrounding quote marks and ellipses) but not about words.
@@ -29,18 +28,10 @@ const stripWrapping = (text: string): string =>
     .replace(/[.,;:!?]+$/, "")
     .trim();
 
-/** All text Jev saw: the snapshot plus plain-text documents returned by web_fetch. */
-export const evidenceCorpus = (snapshot: SiteSnapshot, responses: ReadonlyArray<BetaMessage>): string => {
+/** All text Jev saw: the crawler snapshot. */
+export const evidenceCorpus = (snapshot: SiteSnapshot): string => {
   const parts: Array<string> = [snapshot.title, snapshot.description];
   for (const page of snapshot.pages) parts.push(page.title, page.description, ...page.headings, page.text);
-  for (const response of responses) {
-    for (const block of response.content) {
-      if (block.type !== "web_fetch_tool_result" || block.content.type !== "web_fetch_result") continue;
-      const document = block.content.content;
-      if (document.title) parts.push(document.title);
-      if (document.source.type === "text") parts.push(document.source.data);
-    }
-  }
   return normalize(parts.join("\n"));
 };
 

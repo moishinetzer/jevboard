@@ -66,7 +66,6 @@ export const ScriptedJudge = (script: Script) =>
           return {
             verdict: verdictFor(input.siteKey, score, script.overrides?.[input.siteKey]),
             model: "scripted",
-            pagesFetchedByJev: [],
           };
         }),
       duel: (input) =>

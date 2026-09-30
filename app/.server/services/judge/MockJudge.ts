@@ -3,7 +3,7 @@ import { CATEGORIES, type Category, type SiteSnapshot, type Verdict } from "../.
 import { Judge } from "../Judge";
 
 /**
- * A deterministic stand-in for Jev used when no ANTHROPIC_API_KEY is set.
+ * A deterministic stand-in for Jev used when no OPENROUTER_API_KEY is set.
  * Scores come from a hash of the site and roll number, snapped to a coarse
  * grid so ties (and therefore tiebreak duels) happen often in development.
  */
@@ -87,7 +87,7 @@ export const makeMockVerdict = (siteKey: string, snapshot: SiteSnapshot, roll: n
     score,
     label: pick(LABELS, seed >>> 3),
     verdict: pick(ROASTS, seed >>> 5),
-    reasoning: `Mock Jev skimmed ${snapshot.pages.length} page(s) of ${siteKey}. The score is a deterministic placeholder — set ANTHROPIC_API_KEY for the real Jev.`,
+    reasoning: `Mock Jev skimmed ${snapshot.pages.length} page(s) of ${siteKey}. The score is a deterministic placeholder — set OPENROUTER_API_KEY for the real Jev.`,
     subscores: {
       clarity: sub(1),
       demand: sub(4),
@@ -116,7 +116,6 @@ export const MockJudgeLive = Layer.succeed(
         Effect.as({
           verdict: makeMockVerdict(input.siteKey, input.snapshot, input.roll),
           model: "mock-jev",
-          pagesFetchedByJev: [],
         }),
         Effect.withSpan("MockJudge.judge"),
       ),

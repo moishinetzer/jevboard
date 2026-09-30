@@ -108,11 +108,11 @@ export function Tape() {
   );
 }
 
-export function ModeBanner({ mode }: { mode: { payments: "autumn" | "fake"; judge: "claude" | "mock" } }) {
-  if (mode.payments === "autumn" && mode.judge === "claude") return null;
+export function ModeBanner({ mode }: { mode: { payments: "autumn" | "fake"; judge: "live" | "mock" } }) {
+  if (mode.payments === "autumn" && mode.judge === "live") return null;
   const parts = [
     mode.payments === "fake" ? "payments are simulated (no AUTUMN_SECRET_KEY)" : null,
-    mode.judge === "mock" ? "Jev is a deterministic mock (no ANTHROPIC_API_KEY)" : null,
+    mode.judge === "mock" ? "Jev is a deterministic mock (no OPENROUTER_API_KEY)" : null,
   ].filter(Boolean);
   return (
     <div className="border-b-2 border-dashed border-line bg-jev px-4 py-1.5 text-center text-xs font-bold uppercase tracking-wide text-[#111110]">

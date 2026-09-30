@@ -19,7 +19,7 @@ export interface LiveCounters {
 }
 
 export interface ShellData {
-  readonly mode: { readonly payments: "autumn" | "fake"; readonly judge: "claude" | "mock" };
+  readonly mode: { readonly payments: "autumn" | "fake"; readonly judge: "live" | "mock" };
   readonly counters: LiveCounters;
   /** Latest events for "The Tape", newest first. */
   readonly tape: ReadonlyArray<BoardEvent>;

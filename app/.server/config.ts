@@ -1,5 +1,8 @@
 import { Config, Context, Effect, Layer, Option, Redacted } from "effect";
 
+/** OpenRouter's unified reasoning effort. "none" sends no `reasoning` field (for models without reasoning). */
+export type Effort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+
 /**
  * All runtime configuration, read once from the environment.
  *
@@ -12,11 +15,13 @@ export interface AppConfigShape {
   readonly databasePath: string;
   /** Canonical public origin, e.g. https://jevboard.com (no trailing slash). */
   readonly publicUrl: Option.Option<string>;
-  readonly anthropic: Option.Option<{
+  /** All inference goes through OpenRouter (https://openrouter.ai). */
+  readonly openrouter: Option.Option<{
     readonly apiKey: Redacted.Redacted<string>;
+    /** OpenRouter model id, e.g. "google/gemini-3.1-flash-lite". */
     readonly model: string;
-    readonly judgeEffort: "low" | "medium" | "high" | "xhigh" | "max";
-    readonly duelEffort: "low" | "medium" | "high" | "xhigh" | "max";
+    readonly judgeEffort: Effort;
+    readonly duelEffort: Effort;
   }>;
   readonly autumn: Option.Option<{
     readonly secretKey: Redacted.Redacted<string>;
@@ -36,8 +41,13 @@ export interface AppConfigShape {
   readonly crawlUserAgent: string;
 }
 
-const Effort = (name: string, fallback: "low" | "medium" | "high") =>
-  Config.Literals(["low", "medium", "high", "xhigh", "max"], name).pipe(Config.withDefault(fallback));
+/** Jev's default model; pick another OpenRouter id with JEV_MODEL. */
+export const DEFAULT_MODEL = "google/gemini-3.1-flash-lite";
+
+const Effort = (name: string, fallback: Effort) =>
+  Config.Literals(["none", "minimal", "low", "medium", "high", "xhigh", "max"], name).pipe(
+    Config.withDefault(fallback),
+  );
 
 const config = Effect.gen(function* () {
   const env = yield* Config.Literals(["development", "production", "test"], "NODE_ENV").pipe(
@@ -46,9 +56,9 @@ const config = Effect.gen(function* () {
   const databasePath = yield* Config.String("DATABASE_PATH").pipe(Config.withDefault("./data/jevboard.db"));
   const publicUrl = yield* Config.option(Config.String("PUBLIC_URL"));
 
-  const anthropicKey = yield* Config.option(Config.Redacted("ANTHROPIC_API_KEY"));
-  const model = yield* Config.String("JEV_MODEL").pipe(Config.withDefault("claude-opus-5-5"));
-  const judgeEffort = yield* Effort("JEV_JUDGE_EFFORT", "medium");
+  const openrouterKey = yield* Config.option(Config.Redacted("OPENROUTER_API_KEY"));
+  const model = yield* Config.String("JEV_MODEL").pipe(Config.withDefault(DEFAULT_MODEL));
+  const judgeEffort = yield* Effort("JEV_JUDGE_EFFORT", "low");
   const duelEffort = yield* Effort("JEV_DUEL_EFFORT", "low");
 
   const autumnKey = yield* Config.option(Config.Redacted("AUTUMN_SECRET_KEY"));
@@ -71,9 +81,9 @@ const config = Effect.gen(function* () {
         new Error("AUTUMN_SECRET_KEY is required in production (set JEV_ALLOW_FAKE_PAYMENTS=true to override)."),
       );
     }
-    if (Option.isNone(anthropicKey) && !allowMockJudge) {
+    if (Option.isNone(openrouterKey) && !allowMockJudge) {
       return yield* Effect.die(
-        new Error("ANTHROPIC_API_KEY is required in production (set JEV_ALLOW_MOCK_JUDGE=true to override)."),
+        new Error("OPENROUTER_API_KEY is required in production (set JEV_ALLOW_MOCK_JUDGE=true to override)."),
       );
     }
   }
@@ -82,7 +92,7 @@ const config = Effect.gen(function* () {
     env,
     databasePath,
     publicUrl: Option.map(publicUrl, (url) => url.replace(/\/+$/, "")),
-    anthropic: Option.map(anthropicKey, (apiKey) => ({ apiKey, model, judgeEffort, duelEffort })),
+    openrouter: Option.map(openrouterKey, (apiKey) => ({ apiKey, model, judgeEffort, duelEffort })),
     autumn: Option.map(autumnKey, (secretKey) => ({
       secretKey,
       apiUrl: autumnApiUrl.replace(/\/+$/, ""),
@@ -107,7 +117,7 @@ export class AppConfig extends Context.Service<AppConfig, AppConfigShape>()("jev
         env: "test",
         databasePath: ":memory:",
         publicUrl: Option.none(),
-        anthropic: Option.none(),
+        openrouter: Option.none(),
         autumn: Option.none(),
         workers: 1,
         crawlUserAgent: "JevBot/test",

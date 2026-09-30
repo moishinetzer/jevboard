@@ -8,16 +8,12 @@ export interface JudgeInput {
   readonly snapshot: SiteSnapshot;
   /** 1 for a first judgment, 2+ for rerolls. */
   readonly roll: number;
-  /** Rerolls ask Jev to bypass any fetch cache and look at the live site again. */
-  readonly fresh: boolean;
 }
 
 export interface JudgeResult {
   readonly verdict: Verdict;
-  /** Model id that produced the verdict (e.g. "claude-opus-5-5" or "mock-jev"). */
+  /** Model id that produced the verdict (e.g. "google/gemini-3.1-flash-lite" or "mock-jev"). */
   readonly model: string;
-  /** URLs Jev fetched itself with its web tool while judging (may be empty). */
-  readonly pagesFetchedByJev: ReadonlyArray<string>;
 }
 
 export interface DuelInput {
@@ -34,8 +30,8 @@ export interface DuelInput {
 export class Judge extends Context.Service<
   Judge,
   {
-    /** "claude" in production, "mock" when no API key is configured. */
-    readonly kind: "claude" | "mock";
+    /** "live" (OpenRouter) in production, "mock" when no API key is configured. */
+    readonly kind: "live" | "mock";
     readonly judge: (input: JudgeInput) => Effect.Effect<JudgeResult, JudgeError>;
     readonly duel: (input: DuelInput) => Effect.Effect<DuelVerdict, JudgeError>;
   }
