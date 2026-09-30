@@ -18,3 +18,6 @@
 
 # Secrets files for `wrangler deploy --secrets-file`
 *.secrets.env
+
+# Claude Code agent worktrees
+/.claude/worktrees/
