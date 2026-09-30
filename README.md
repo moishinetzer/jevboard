@@ -1,6 +1,6 @@
 # Ranked by Jev
 
-**Think you're #1? Prove it for $5.** Live at [rankedbyjev.com](https://rankedbyjev.com). (The repo and
+**Think you're #1? Jev will be the judge.** Live at [rankedbyjev.com](https://rankedbyjev.com). (The repo and
 Cloudflare resources keep the working name `jevboard`.)
 
 Ranked by Jev is a public leaderboard of businesses ranked by _Jev_, an AI judge. No bidding, no ads, no buying

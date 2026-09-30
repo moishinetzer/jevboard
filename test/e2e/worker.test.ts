@@ -130,7 +130,7 @@ describe("Jevboard Worker (simulated payments, mock Jev)", () => {
     const seen = await stranger.get(`/s/${SITE}`);
     await verdictOf(seen, SITE);
     expect(rejudgeUrlOf(seen)).toBeUndefined();
-    expect(seen.html).not.toContain(">Rejudge · $5<");
+    expect(seen.html).not.toContain(">Rejudge<");
 
     expect(rejudgeUrlOf(await submitter.get(`/s/${SITE}`))).toBe(`https://${SITE}/`);
   });
@@ -140,7 +140,7 @@ describe("Jevboard Worker (simulated payments, mock Jev)", () => {
     const entry = await browser.get(`/s/${SITE}`);
     const before = await verdictOf(entry, SITE);
 
-    // "Rejudge · $5" posts the site's URL from a hidden field.
+    // "Rejudge" posts the site's URL from a hidden field.
     const siteUrl = rejudgeUrlOf(entry);
     expect(siteUrl).toBe(`https://${SITE}/`);
     const { checkout, orderId } = await submitForCheckout(browser, { url: siteUrl ?? "" });

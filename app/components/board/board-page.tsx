@@ -53,9 +53,10 @@ export function BoardPage({ data }: { data: BoardPageData }) {
           <h1 className="headline mt-[22px] text-[40px] sm:mt-[30px] sm:text-6xl">
             Think you're #1?
             <br />
-            <span className="text-accent">Prove it for $5.</span>
+            <span className="text-accent">Jev will be the judge.</span>
           </h1>
           <JudgeForm className="mt-5 w-full sm:mt-[26px]" />
+          <p className="mt-2.5 text-xs text-soft sm:text-[13px]">$5 · your ranking in about a minute</p>
         </section>
 
         <section

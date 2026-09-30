@@ -29,7 +29,7 @@ export const links: Route.LinksFunction = () => [
 ];
 
 export const meta: Route.MetaFunction = () => [
-  { title: "Ranked by Jev: think you're #1? Prove it for $5." },
+  { title: "Ranked by Jev: think you're #1? Jev will be the judge." },
   {
     name: "description",
     content:

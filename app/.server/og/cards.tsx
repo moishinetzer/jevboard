@@ -112,7 +112,7 @@ function Footer({ children }: { children: string }) {
   );
 }
 
-const TAGLINE = "Think you're #1? Prove it for $5.";
+const TAGLINE = "Think you're #1? Jev will be the judge.";
 
 /** Rough Bricolage Grotesque 800 advance widths in em (tight tracking included). */
 const DISPLAY_EM = 0.56;
@@ -241,7 +241,7 @@ export interface DefaultCardProps {
   readonly king: { readonly siteKey: string } | null;
 }
 
-const HEADLINE_SIZE = 96;
+const HEADLINE_SIZE = 82;
 
 function Headline({ children, color }: { children: string; color: string }) {
   return (
@@ -277,14 +277,14 @@ export function DefaultCard(props: DefaultCardProps) {
       <Brand />
 
       <div style={row({ flex: 1, justifyContent: "space-between", gap: GAP })}>
-        <div style={col({ width: 760 })}>
+        <div style={col({ width: 880 })}>
           <Headline color={INK}>Think you're #1?</Headline>
-          <Headline color={ACCENT}>Prove it for $5.</Headline>
+          <Headline color={ACCENT}>Jev will be the judge.</Headline>
           <div style={{ display: "flex", marginTop: 24, fontSize: 28, fontWeight: 500, lineHeight: 1.4, color: SOFT }}>
             No bidding, no ads, no buying your way up. Jev reads your site and ranks how useful your business really is.
           </div>
         </div>
-        <Face size={240} />
+        <Face size={190} />
       </div>
 
       <div style={{ display: "flex" }}>

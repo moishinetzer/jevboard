@@ -19,9 +19,9 @@ const CHECKING_LINES = [
  * The $5 form. Posts to /judge with a fetcher: validation errors render
  * inline, success redirects to checkout.
  *
- * Without `siteUrl` it's the URL field plus "Judge my site". With `siteUrl`
- * it's one button for that site: "Rejudge · $5", or with `newSite` a first
- * judgment ("Judge acme.com · $5").
+ * Without `siteUrl` it's the URL field plus "Get my ranking". With `siteUrl`
+ * it's one button for that site: "Rejudge", or with `newSite` a first
+ * judgment ("Get acme.com ranked").
  */
 export function JudgeForm({
   siteUrl,
@@ -52,7 +52,7 @@ export function JudgeForm({
   }, [busy]);
 
   const oneClick = siteUrl !== undefined;
-  const text = label ?? (!oneClick ? "Judge my site" : newSite ? `Judge ${hostOf(siteUrl)} · $5` : "Rejudge · $5");
+  const text = label ?? (!oneClick ? "Get my ranking" : newSite ? `Get ${hostOf(siteUrl)} ranked` : "Rejudge");
 
   return (
     <fetcher.Form method="post" action="/judge" className={className}>

@@ -361,7 +361,7 @@ function Declined({ order, flag }: { order: OrderView; flag: ContentFlag }) {
       <p className="mt-2 text-sm text-soft">It won't appear on the board. Jev reviews websites, not people.</p>
       <div className="mt-8 flex flex-wrap justify-center gap-2.5">
         {flag === "parked" ? (
-          <JudgeForm siteUrl={order.url} label="Launched since? Rejudge · $5" buttonClassName={`btn ${BIG_BUTTON}`} />
+          <JudgeForm siteUrl={order.url} label="Launched since? Rejudge" buttonClassName={`btn ${BIG_BUTTON}`} />
         ) : null}
         <Link to="/" className={`btn btn-ghost ${BIG_BUTTON}`}>
           Back to the board
@@ -398,7 +398,7 @@ export function Failed({ order }: { order: OrderView }) {
         <JudgeForm
           siteUrl={order.url}
           newSite={order.kind !== "reroll"}
-          label="Try again · $5"
+          label="Try again"
           buttonClassName={`btn ${BIG_BUTTON}`}
         />
         <Link to="/" className={`btn btn-ghost ${BIG_BUTTON}`}>

@@ -10,7 +10,7 @@ export const loader = effectLoader("home", () => loadBoard(null));
 export const shouldRevalidate: ShouldRevalidateFunction = ({ formAction, defaultShouldRevalidate }) =>
   formAction === "/judge" ? false : defaultShouldRevalidate;
 
-const TITLE = "Ranked by Jev: think you're #1? Prove it for $5.";
+const TITLE = "Ranked by Jev: think you're #1? Jev will be the judge.";
 const DESCRIPTION =
   "No bidding, no ads, no buying your way up. Jev reads your site and ranks how useful your business really is.";
 
@@ -28,7 +28,7 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
     { property: "og:description", content: description },
     { property: "og:url", content: `${origin}/` },
     { property: "og:image", content: image },
-    { property: "og:image:alt", content: "Ranked by Jev: think you're #1? Prove it for $5." },
+    { property: "og:image:alt", content: "Ranked by Jev: think you're #1? Jev will be the judge." },
     { name: "twitter:card", content: "summary_large_image" },
     { name: "twitter:title", content: TITLE },
     { name: "twitter:description", content: description },

@@ -21,7 +21,7 @@ export interface ShareMessage {
 }
 
 const defendantBody = (f: ShareFacts): string => {
-  if (f.rank === 1) return `Jev ranks ${f.siteKey} #1 on Ranked by Jev. Think you can beat us? Prove it for $5:`;
+  if (f.rank === 1) return `Jev ranks ${f.siteKey} #1 on Ranked by Jev. Think you can beat us?`;
   if (f.rank <= 10) return `Jev put ${f.siteKey} at #${f.rank} on Ranked by Jev. Come at us:`;
   return `Paid $5 for Jev to judge how useful my business is. #${f.rank} of ${f.total} on Ranked by Jev. Worth it.`;
 };
