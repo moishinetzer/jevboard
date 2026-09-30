@@ -86,6 +86,7 @@ Worker env ─┬─ D1 (@effect/sql-d1, atomic batches) ── Board, Orders, V
 | Workers + static assets | SSR, loaders/actions, resource routes (OG cards, badges) |
 | D1 | Entries, orders, judgments, duels, events, reigns, visitors, daily views |
 | Queues | `jevboard-judgments` (crawl + verdict, parallel) → `jevboard-placements` (duels + ranking, serialized) |
+| PostHog (EU) | Browser: pageviews, autocapture, session replay, errors, via the `/rbj` proxy. Server: funnel events, `$ai_generation` per model call, and every Effect span over OTLP to PostHog Tracing, linked to the visitor and their replay |
 | Cron Triggers | Payment sweeper, stalled-job recovery |
 | Rate Limiting | Per-visitor and per-IP submission limits |
 

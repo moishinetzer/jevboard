@@ -88,7 +88,7 @@ describe("Analytics", () => {
   it.effect("track is a no-op where Analytics isn't provided", () => track("anything", { a: 1 }));
 });
 
-describe("proxyPostHog (/ingest)", () => {
+describe("proxyPostHog (/rbj)", () => {
   const env = { POSTHOG_TOKEN: "phc_test", POSTHOG_HOST: "https://eu.i.posthog.com" } as unknown as Env;
   const calls: Array<{ url: string; init: RequestInit }> = [];
   afterEach(() => {
@@ -103,21 +103,21 @@ describe("proxyPostHog (/ingest)", () => {
 
   it("leaves every other path to the app", () => {
     assert.isUndefined(proxyPostHog(new Request("https://rankedbyjev.com/"), env));
-    assert.isUndefined(proxyPostHog(new Request("https://rankedbyjev.com/ingestion-report"), env));
-    assert.isUndefined(proxyPostHog(new Request("https://rankedbyjev.com/ingest/e/"), {} as unknown as Env));
+    assert.isUndefined(proxyPostHog(new Request("https://rankedbyjev.com/rbjx"), env));
+    assert.isUndefined(proxyPostHog(new Request("https://rankedbyjev.com/rbj/e/"), {} as unknown as Env));
   });
 
   it("sends events to the ingestion host without our cookies, and SDK assets to the assets host", async () => {
     stubFetch();
     await proxyPostHog(
-      new Request("https://rankedbyjev.com/ingest/e/?ver=1", {
+      new Request("https://rankedbyjev.com/rbj/e/?ver=1", {
         method: "POST",
         body: "{}",
         headers: { cookie: "jev_vid=secret", "cf-connecting-ip": "203.0.113.9" },
       }),
       env,
     );
-    await proxyPostHog(new Request("https://rankedbyjev.com/ingest/static/array.js"), env);
+    await proxyPostHog(new Request("https://rankedbyjev.com/rbj/static/array.js"), env);
 
     assert.strictEqual(calls[0]!.url, "https://eu.i.posthog.com/e/?ver=1");
     const headers = new Headers(calls[0]!.init.headers);

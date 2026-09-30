@@ -17,7 +17,7 @@ const loadPostHog = (config: AnalyticsConfig): Promise<PostHog> => {
   loading ??= import("posthog-js").then(({ default: posthog }) => {
     posthog.init(config.token, {
       // Same-site proxy (workers/posthog-proxy.ts), so ad blockers leave it alone.
-      api_host: "/ingest",
+      api_host: "/rbj",
       ui_host: "https://eu.posthog.com",
       defaults: "2026-08-30",
       person_profiles: "always",
