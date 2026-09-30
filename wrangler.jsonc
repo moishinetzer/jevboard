@@ -63,8 +63,9 @@
     "JEV_DUEL_EFFORT": "low",
     "AUTUMN_PLAN_ID": "judgment",
     "AUTUMN_FEATURE_ID": "judgment",
-    "AUTUMN_API_VERSION": "2.4.0"
-    // Set to your public origin before deploying, e.g. "PUBLIC_URL": "https://jevboard.com".
-    // Without it, checkout return URLs and share links use the request's own origin.
+    "AUTUMN_API_VERSION": "2.4.0",
+    // Public origin for checkout return URLs and share links. Without it they use
+    // the request's own origin.
+    "PUBLIC_URL": "https://jevboard.moishinetzer.workers.dev"
   }
 }
