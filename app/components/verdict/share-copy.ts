@@ -1,26 +1,16 @@
 /**
- * Prefilled share text. The defendant brags (or confesses); spectators gossip.
+ * Prefilled share text. The business brags (or confesses); spectators gossip.
  * Every template is short enough for one post and ends with the verdict URL.
  */
-
-/** At or above this, the verdict is something to brag about. */
-export const HIGH_SCORE = 600;
-
-export const isHighScore = (score: number): boolean => score >= HIGH_SCORE;
 
 export type ShareVoice = "defendant" | "spectator";
 
 export interface ShareFacts {
   readonly siteKey: string;
-  readonly score: number;
   readonly rank: number;
   readonly total: number;
-  /** Absolute URL of the verdict page. */
+  /** Absolute URL of the business on the board. */
   readonly url: string;
-  readonly rolls?: number;
-  readonly previousScore?: number | null;
-  /** Set when this verdict just won a tiebreak duel against that site. */
-  readonly duelWonAgainst?: string | null;
 }
 
 export interface ShareMessage {
@@ -31,27 +21,13 @@ export interface ShareMessage {
 }
 
 const defendantBody = (f: ShareFacts): string => {
-  if (f.rank === 1) {
-    return `Jev ranks ${f.siteKey} #1 of ${f.total} on Jevboard with ${f.score}/1000. Dethrone us if you can:`;
-  }
-  if (f.duelWonAgainst) {
-    return `Tied at ${f.score}. Jev put us in the Duel Pit with ${f.duelWonAgainst}. We won.`;
-  }
-  const retrials = (f.rolls ?? 1) - 1;
-  if (retrials >= 2 && f.previousScore != null && f.score > f.previousScore) {
-    return `${retrials} retrials later, Jev finally respects us: ${f.previousScore} → ${f.score}.`;
-  }
-  if (isHighScore(f.score)) {
-    return `Jev rated ${f.siteKey} ${f.score}/1000 (#${f.rank} of ${f.total}). Come at us:`;
-  }
-  return `Paid $5 to have an AI judge how useful my business is. ${f.score}/1000. Worth it.`;
+  if (f.rank === 1) return `Jev ranks ${f.siteKey} #1 on Jevboard. Think you're more useful? Prove it for $5:`;
+  if (f.rank <= 10) return `Jev ranks ${f.siteKey} #${f.rank} on Jevboard. Come at us:`;
+  return `Paid $5 to have an AI judge how useful my business is. #${f.rank} of ${f.total} on Jevboard. Worth it.`;
 };
 
-const spectatorBody = (f: ShareFacts): string => {
-  if (f.rank === 1) return `${f.siteKey} is #1 on Jevboard with ${f.score}/1000.`;
-  if (isHighScore(f.score)) return `Jev rated ${f.siteKey} ${f.score}/1000 (#${f.rank} of ${f.total}). Agree?`;
-  return `Jev just scored ${f.siteKey} ${f.score}/1000. Brutal.`;
-};
+const spectatorBody = (f: ShareFacts): string =>
+  f.rank === 1 ? `${f.siteKey} is #1 on Jevboard. Agree?` : `Jev ranks ${f.siteKey} #${f.rank} of ${f.total} on Jevboard. Agree?`;
 
 export const shareMessage = (facts: ShareFacts, voice: ShareVoice): ShareMessage => {
   const body = voice === "defendant" ? defendantBody(facts) : spectatorBody(facts);
@@ -59,6 +35,3 @@ export const shareMessage = (facts: ShareFacts, voice: ShareVoice): ShareMessage
 };
 
 export const xIntentUrl = (text: string): string => `https://x.com/intent/tweet?text=${encodeURIComponent(text)}`;
-
-export const linkedInShareUrl = (url: string): string =>
-  `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`;

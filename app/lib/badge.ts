@@ -1,13 +1,12 @@
 /**
- * Embeddable "JEV SCORE" badges (shields.io style), built as plain SVG strings.
+ * Embeddable jevboard badges ("jevboard | #3 · 783", shields.io style), built
+ * as plain SVG strings.
  *
  * Pure and dependency-free so it runs anywhere (resource route, tests, scripts).
  * Text is measured with a Verdana advance-width table so the segments fit the
  * copy; every `<text>` also carries `textLength`, which keeps the layout exact
  * when the viewer falls back to a different font.
  */
-
-import { tierFor } from "./format";
 
 export const BADGE_THEMES = ["light", "dark"] as const;
 export type BadgeTheme = (typeof BADGE_THEMES)[number];
@@ -105,66 +104,105 @@ export const textWidth = (text: string, fontSize = 11, bold = false): number => 
   return em * fontSize * (bold ? BOLD_FACTOR : 1);
 };
 
-/** Monospace fonts are ~0.6em per glyph. */
-const monoWidth = (text: string, fontSize: number): number => [...text].length * fontSize * 0.6;
-
 /** Cuts `text` to at most `maxChars` code points, ending with "…" when shortened. */
 export const truncate = (text: string, maxChars: number): string => {
   const chars = [...text];
   return chars.length <= maxChars ? text : `${chars.slice(0, Math.max(1, maxChars - 1)).join("").trimEnd()}…`;
 };
 
+/** Truncates `text` until it measures at most `maxWidth` px. */
+const fitText = (text: string, maxWidth: number, fontSize: number, bold = false): string => {
+  let max = [...text].length;
+  let fitted = text;
+  while (max > 1 && textWidth(fitted, fontSize, bold) > maxWidth) fitted = truncate(text, --max);
+  return fitted;
+};
+
 const round = (n: number): number => Math.round(n * 10) / 10;
+const scale = (n: number): number => Math.round(n * 10_000) / 10_000;
 
 // ---------------------------------------------------------------------------
 // Palette
 // ---------------------------------------------------------------------------
 
-const INK = "#111110";
-const PAPER = "#fbf6e7";
+const FACE_INK = "#1d1b16";
 const JEV = "#ffd400";
-const NOT_JUDGED = "#9a968a";
+
+type Medal = "gold" | "silver" | "bronze";
+
+const medalFor = (rank: number): Medal | null =>
+  rank === 1 ? "gold" : rank === 2 ? "silver" : rank === 3 ? "bronze" : null;
+
+const CROWN_FILL: Record<Medal, string> = { gold: "#fff4b8", silver: "#c9ced6", bronze: "#d0894a" };
+
+interface Tint {
+  readonly bg: string;
+  readonly line: string;
+}
 
 interface Palette {
-  readonly frame: string;
-  readonly shadow: string;
-  readonly labelBg: string;
-  readonly labelInk: string;
-  readonly cardBg: string;
-  readonly cardInk: string;
-  readonly cardSoft: string;
+  /** Card / label background. */
+  readonly paper: string;
+  readonly ink: string;
+  readonly soft: string;
+  readonly line: string;
+  readonly pill: string;
+  readonly accent: string;
+  /** Text on the accent. */
+  readonly onAccent: string;
+  readonly medal: Record<Medal, Tint>;
 }
 
 const PALETTES: Record<BadgeTheme, Palette> = {
   light: {
-    frame: INK,
-    shadow: INK,
-    labelBg: INK,
-    labelInk: JEV,
-    cardBg: "#fffdf6",
-    cardInk: INK,
-    cardSoft: "#4a463d",
+    paper: "#fcfaf3",
+    ink: "#1d1b16",
+    soft: "#6b6658",
+    line: "#ebe5d4",
+    pill: "#f3eedf",
+    accent: "#b45309",
+    onAccent: "#ffffff",
+    medal: {
+      gold: { bg: "#fff7d1", line: "#f3d774" },
+      silver: { bg: "#f4f5f7", line: "#d9dde3" },
+      bronze: { bg: "#fcf0e4", line: "#ebc7a3" },
+    },
   },
   dark: {
-    frame: "#f6f1e1",
-    shadow: "#000000",
-    labelBg: "#1a1914",
-    labelInk: JEV,
-    cardBg: "#1a1914",
-    cardInk: "#f6f1e1",
-    cardSoft: "#b9b2a0",
+    paper: "#1c1b16",
+    ink: "#f4f1e6",
+    soft: "#a9a393",
+    line: "#34312a",
+    pill: "#221f18",
+    accent: "#f5b93a",
+    onAccent: "#14130f",
+    // The site's translucent medal tints, pre-blended onto the dark card.
+    medal: {
+      gold: { bg: "#302c14", line: "#6b5c0e" },
+      silver: { bg: "#2a2925", line: "#505150" },
+      bronze: { bg: "#2e261b", line: "#60452a" },
+    },
   },
 };
 
 const FONT_SANS = "Verdana,Geneva,'DejaVu Sans',sans-serif";
-const FONT_DISPLAY = "Anton,Impact,'Arial Narrow Bold','Helvetica Neue',sans-serif";
-const FONT_MONO = "'JetBrains Mono',Menlo,Consolas,'DejaVu Sans Mono',monospace";
+const FONT_DISPLAY = "'Bricolage Grotesque','Helvetica Neue',Arial,sans-serif";
 
-/** Jev's face (crown, monocle, frown) scaled into a `size`×`size` box at (x, y). */
-const jevFace = (x: number, y: number, size: number): string => {
-  const s = round(size / 64);
-  return `<g transform="translate(${x} ${y}) scale(${s})"><path d="M18 14 L24 4 L32 12 L40 4 L46 14 Z" fill="${JEV}" stroke="${INK}" stroke-width="4" stroke-linejoin="round"/><circle cx="32" cy="36" r="24" fill="${JEV}" stroke="${INK}" stroke-width="4.5"/><circle cx="23" cy="33" r="4.5" fill="${INK}"/><circle cx="41" cy="33" r="8" fill="#fffdf6" stroke="${INK}" stroke-width="3.5"/><circle cx="41" cy="33" r="3.6" fill="${INK}"/><path d="M23 46 Q32 42 41 46" fill="none" stroke="${INK}" stroke-width="4" stroke-linecap="round"/></g>`;
-};
+/** Jev's face (crown, brows, monocle) scaled into a `size`×`size` box at (x, y). */
+const jevFace = (x: number, y: number, size: number): string =>
+  `<g transform="translate(${round(x)} ${round(y)}) scale(${scale(size / 64)})" stroke="${FACE_INK}" stroke-linecap="round" stroke-linejoin="round">` +
+  `<path d="M18 14 L24 4 L32 12 L40 4 L46 14 Z" fill="${JEV}" stroke-width="3.5"/>` +
+  `<circle cx="32" cy="36" r="24" fill="${JEV}" stroke-width="4"/>` +
+  `<circle cx="23" cy="33" r="4" fill="${FACE_INK}" stroke="none"/>` +
+  `<circle cx="41" cy="33" r="7.5" fill="#fffdf6" stroke-width="3.5"/>` +
+  `<circle cx="41" cy="33" r="3.2" fill="${FACE_INK}" stroke="none"/>` +
+  `<path d="M17 26 L28 28M35 25 L47 23" fill="none" stroke-width="3.5"/>` +
+  `<path d="M23 46 Q32 42 41 46" fill="none" stroke-width="4"/>` +
+  `</g>`;
+
+/** The top-three crown, `width` px wide, top-left at (x, y). */
+const crown = (x: number, y: number, width: number, medal: Medal): string =>
+  `<g transform="translate(${round(x)} ${round(y)}) scale(${scale(width / 26)})"><path d="M2 16 L4 4 L9 10 L13 2 L17 10 L22 4 L24 16 Z" fill="${CROWN_FILL[medal]}" stroke="${FACE_INK}" stroke-width="2" stroke-linejoin="round"/></g>`;
 
 interface TextAttrs {
   readonly x: number;
@@ -172,9 +210,8 @@ interface TextAttrs {
   readonly size: number;
   readonly fill: string;
   readonly family?: string;
-  readonly weight?: "bold";
+  readonly weight?: "bold" | "800";
   readonly anchor?: "start" | "middle" | "end";
-  readonly spacing?: number;
   /**
    * Pins the rendered width (SVG `textLength`) to the measured estimate so a
    * fallback font can't push text out of its segment. Omit for display type
@@ -192,7 +229,6 @@ const text = (content: string, attrs: TextAttrs): string => {
     `font-size="${attrs.size}"`,
     attrs.weight ? `font-weight="${attrs.weight}"` : "",
     attrs.anchor && attrs.anchor !== "start" ? `text-anchor="${attrs.anchor}"` : "",
-    attrs.spacing ? `letter-spacing="${attrs.spacing}"` : "",
     attrs.length !== undefined ? `textLength="${round(attrs.length)}" lengthAdjust="spacingAndGlyphs"` : "",
   ].filter(Boolean);
   return `<text ${parts.join(" ")}>${escapeXml(content)}</text>`;
@@ -208,212 +244,163 @@ const wrapSvg = (width: number, height: number, title: string, body: string, hre
 // Layouts
 // ---------------------------------------------------------------------------
 
-const SHADOW = 2;
 const PAD = 7;
+const RADIUS = 4;
 
-/** Two-segment shields-style pill: [face + left | right]. */
+/** Two-segment shields-style pill: [face + label | value], rounded, with a hairline outline. */
 const pill = (options: {
-  readonly left: string;
-  readonly right: string;
-  readonly rightBg: string;
-  readonly rightInk: string;
+  readonly label: string;
+  readonly value: string;
+  readonly valueBg: string;
+  readonly valueInk: string;
   readonly palette: Palette;
   readonly title: string;
   readonly href: string | undefined;
   readonly height: number;
 }): string => {
   const { palette, height } = options;
-  const fontSize = height >= 22 ? 11 : 10;
+  const fontSize = 11;
   const iconSize = height - 6;
-  const leftTextWidth = options.left ? textWidth(options.left, fontSize, true) : 0;
-  const rightTextWidth = textWidth(options.right, fontSize, true);
-  const iconSpace = iconSize + (options.left ? 5 : 0);
-  const leftWidth = Math.ceil(PAD - 2 + iconSpace + leftTextWidth + (options.left ? PAD : PAD - 2));
-  const rightWidth = Math.ceil(PAD + rightTextWidth + PAD);
-  const innerWidth = leftWidth + rightWidth;
+  const labelWidth = options.label ? textWidth(options.label, fontSize, true) : 0;
+  const valueWidth = textWidth(options.value, fontSize, true);
+  const iconSpace = iconSize + (options.label ? 5 : 0);
+  const leftWidth = Math.ceil(PAD - 2 + iconSpace + labelWidth + (options.label ? PAD : PAD - 2));
+  const rightWidth = Math.ceil(PAD + valueWidth + PAD);
+  const width = leftWidth + rightWidth;
   const baseline = round(height / 2 + fontSize * 0.36);
+  const r = RADIUS;
 
   const body = [
-    `<rect x="${SHADOW}" y="${SHADOW}" width="${innerWidth}" height="${height}" fill="${palette.shadow}"/>`,
-    `<rect width="${leftWidth}" height="${height}" fill="${palette.labelBg}"/>`,
-    `<rect x="${leftWidth}" width="${rightWidth}" height="${height}" fill="${options.rightBg}"/>`,
-    `<rect x="0.75" y="0.75" width="${innerWidth - 1.5}" height="${height - 1.5}" fill="none" stroke="${palette.frame}" stroke-width="1.5"/>`,
-    `<path d="M${leftWidth} 0V${height}" stroke="${palette.frame}" stroke-width="1.5"/>`,
+    `<rect width="${width}" height="${height}" rx="${r}" fill="${palette.pill}"/>`,
+    `<path d="M${leftWidth} 0H${width - r}A${r} ${r} 0 0 1 ${width} ${r}V${height - r}A${r} ${r} 0 0 1 ${width - r} ${height}H${leftWidth}Z" fill="${options.valueBg}"/>`,
+    `<rect x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" rx="${r - 0.5}" fill="none" stroke="${palette.line}"/>`,
     jevFace(PAD - 2, 3, iconSize),
-    options.left
-      ? text(options.left, {
-          x: PAD - 2 + iconSpace,
-          y: baseline,
-          size: fontSize,
-          fill: palette.labelInk,
-          weight: "bold",
-          length: leftTextWidth,
-        })
+    options.label
+      ? text(options.label, { x: PAD - 2 + iconSpace, y: baseline, size: fontSize, fill: palette.ink, weight: "bold", length: labelWidth })
       : "",
-    text(options.right, {
-      x: leftWidth + PAD,
-      y: baseline,
-      size: fontSize,
-      fill: options.rightInk,
-      weight: "bold",
-      length: rightTextWidth,
-    }),
+    text(options.value, { x: leftWidth + PAD, y: baseline, size: fontSize, fill: options.valueInk, weight: "bold", length: valueWidth }),
   ].join("");
 
-  return wrapSvg(innerWidth + SHADOW, height + SHADOW, options.title, body, options.href);
+  return wrapSvg(width, height, options.title, body, options.href);
 };
 
 export const BIG_BADGE_SIZE = { width: 300, height: 104 } as const;
 
-/** Small card: header strip, tier-coloured score block, rank + tier, verdict label footer. */
+/** Small card: face + wordmark and a rank chip on top; site, caption and the big score below. */
 const card = (options: {
   readonly palette: Palette;
   readonly title: string;
   readonly href: string | undefined;
-  readonly scoreBg: string;
-  readonly scoreInk: string;
+  readonly chip: string;
+  readonly medal: Medal | null;
   readonly score: string;
-  /** Small line under the score, e.g. "/1000". */
-  readonly scoreUnit?: string;
-  readonly headline: string;
-  readonly subline: string;
+  readonly scoreInk: string;
+  readonly site: string;
   readonly caption: string;
 }): string => {
   const { palette } = options;
-  const innerW = BIG_BADGE_SIZE.width - 3;
-  const innerH = BIG_BADGE_SIZE.height - 3;
-  const header = 22;
-  const footer = 20;
-  const scoreW = 100;
-  const infoX = scoreW + 12;
-  const infoW = innerW - infoX - 10;
-  const bodyBottom = innerH - footer;
+  const { width, height } = BIG_BADGE_SIZE;
+  const inset = 14;
+
+  const chipSize = 10;
+  const chipText = textWidth(options.chip, chipSize, true);
+  const crownWidth = options.medal ? 14 : 0;
+  const chipW = Math.ceil(10 + crownWidth + (options.medal ? 5 : 0) + chipText + 10);
+  const chipH = 22;
+  const chipX = width - inset - chipW;
+  const chipY = 12;
+  const tint = options.medal ? palette.medal[options.medal] : { bg: palette.pill, line: palette.line };
 
   // Display type is sized against Verdana Bold (the widest likely fallback), so it always fits.
-  const headlineSize = Math.min(24, Math.floor(infoW / Math.max(1, textWidth(options.headline, 1, true))));
-  const scoreSize = options.score.length > 3 ? 36 : 42;
-  const subline = truncate(options.subline, 26);
-  const sublineWidth = textWidth(subline, 9.5, true);
-  const captionSize = 9;
-  const caption = truncate(options.caption, Math.floor((innerW - 16) / (captionSize * 0.6)));
+  const scoreSize = 44;
+  const scoreWidth = textWidth(options.score, scoreSize, true);
+  const infoWidth = width - inset * 2 - scoreWidth - 12;
+  const site = fitText(options.site, infoWidth, 12, true);
+  const caption = fitText(options.caption, infoWidth, 10);
 
   const body = [
-    `<rect x="3" y="3" width="${innerW}" height="${innerH}" fill="${palette.shadow}"/>`,
-    `<rect width="${innerW}" height="${innerH}" fill="${palette.cardBg}"/>`,
-    `<rect width="${innerW}" height="${header}" fill="${INK}"/>`,
-    jevFace(6, 3, 16),
-    text("RATED BY JEV", { x: 28, y: 15, size: 10, fill: JEV, weight: "bold", length: textWidth("RATED BY JEV", 10, true) }),
-    text("JEVBOARD", { x: innerW - 8, y: 15, size: 9, fill: PAPER, weight: "bold", anchor: "end", length: textWidth("JEVBOARD", 9, true) }),
-    `<rect y="${header}" width="${scoreW}" height="${bodyBottom - header}" fill="${options.scoreBg}"/>`,
-    `<path d="M${scoreW} ${header}V${bodyBottom}M0 ${header}H${innerW}M0 ${bodyBottom}H${innerW}" stroke="${palette.frame}" stroke-width="1.5"/>`,
+    `<rect x="0.75" y="0.75" width="${width - 1.5}" height="${height - 1.5}" rx="10" fill="${palette.paper}" stroke="${palette.line}" stroke-width="1.5"/>`,
+    jevFace(inset - 2, 12, 22),
+    text("jevboard", { x: inset + 25, y: 28, size: 14, fill: palette.ink, family: FONT_DISPLAY, weight: "bold", length: textWidth("jevboard", 14, true) }),
+    `<rect x="${chipX + 0.5}" y="${chipY + 0.5}" width="${chipW - 1}" height="${chipH - 1}" rx="${chipH / 2}" fill="${tint.bg}" stroke="${tint.line}"/>`,
+    options.medal ? crown(chipX + 10, chipY + 6, crownWidth, options.medal) : "",
+    text(options.chip, {
+      x: chipX + 10 + crownWidth + (options.medal ? 5 : 0),
+      y: chipY + 15,
+      size: chipSize,
+      fill: palette.ink,
+      weight: "bold",
+      length: chipText,
+    }),
+    text(site, { x: inset, y: 74, size: 12, fill: palette.ink, weight: "bold", length: textWidth(site, 12, true) }),
+    text(caption, { x: inset, y: 90, size: 10, fill: palette.soft, length: textWidth(caption, 10) }),
     text(options.score, {
-      x: scoreW / 2,
-      y: header + (scoreSize > 40 ? 40 : 37),
+      x: width - inset,
+      y: 90,
       size: scoreSize,
       fill: options.scoreInk,
       family: FONT_DISPLAY,
-      anchor: "middle",
+      weight: "800",
+      anchor: "end",
     }),
-    options.scoreUnit
-      ? text(options.scoreUnit, {
-          x: scoreW / 2,
-          y: bodyBottom - 5,
-          size: 9,
-          fill: options.scoreInk,
-          family: FONT_MONO,
-          weight: "bold",
-          anchor: "middle",
-          length: monoWidth(options.scoreUnit, 9),
-        })
-      : "",
-    text(options.headline, { x: infoX, y: header + 27, size: headlineSize, fill: palette.cardInk, family: FONT_DISPLAY }),
-    text(subline, { x: infoX, y: header + 45, size: 9.5, fill: palette.cardSoft, weight: "bold", length: Math.min(infoW, sublineWidth) }),
-    text(caption, { x: 8, y: innerH - 6.5, size: captionSize, fill: palette.cardInk, family: FONT_MONO, weight: "bold", length: monoWidth(caption, captionSize) }),
-    `<rect x="0.75" y="0.75" width="${innerW - 1.5}" height="${innerH - 1.5}" fill="none" stroke="${palette.frame}" stroke-width="1.5"/>`,
   ].join("");
 
-  return wrapSvg(BIG_BADGE_SIZE.width, BIG_BADGE_SIZE.height, options.title, body, options.href);
+  return wrapSvg(width, height, options.title, body, options.href);
 };
 
 // ---------------------------------------------------------------------------
 // Public builders
 // ---------------------------------------------------------------------------
 
-/** Badge for a judged site. */
+/** Badge for a ranked site: "jevboard | #14 · 812". */
 export const buildBadge = (entry: BadgeEntry, options: BadgeOptions = {}): string => {
   const palette = PALETTES[options.theme ?? "light"];
-  const tier = tierFor(entry.score);
-  const title = `Rated ${entry.score}/1000 by Jev · #${entry.rank} of ${entry.total} on Jevboard (${entry.siteKey})`;
+  const title = `${entry.siteKey} is #${entry.rank} of ${entry.total} on jevboard, with a score of ${entry.score}`;
+  const value = `#${entry.rank} · ${entry.score}`;
+  const shared = { valueBg: palette.accent, valueInk: palette.onAccent, palette, title, href: options.href };
 
   switch (options.style ?? "default") {
     case "compact":
-      return pill({
-        left: "",
-        right: `${entry.score} · #${entry.rank}`,
-        rightBg: tier.color,
-        rightInk: tier.ink,
-        palette,
-        title,
-        href: options.href,
-        height: 20,
-      });
+      return pill({ ...shared, label: "", value, height: 20 });
     case "big":
       return card({
         palette,
         title,
         href: options.href,
-        scoreBg: tier.color,
-        scoreInk: tier.ink,
+        chip: `#${entry.rank} on the board`,
+        medal: medalFor(entry.rank),
         score: String(entry.score),
-        scoreUnit: "/1000",
-        headline: `#${entry.rank} of ${entry.total}`,
-        subline: tier.label.toUpperCase(),
-        caption: "Judged by Jev on Jevboard",
+        scoreInk: palette.accent,
+        site: entry.siteKey,
+        caption: "Ranked by Jev",
       });
     default:
-      return pill({
-        left: "JEV SCORE",
-        right: `${entry.score}/1000 · #${entry.rank}`,
-        rightBg: tier.color,
-        rightInk: tier.ink,
-        palette,
-        title,
-        href: options.href,
-        height: 22,
-      });
+      return pill({ ...shared, label: "jevboard", value, height: 20 });
   }
 };
 
-/** Grey badge for a site Jev hasn't judged (yet). Served with 200 so embeds never break. */
+/** Muted badge for a site Jev hasn't ranked (yet). Served with 200 so embeds never break. */
 export const buildNotJudgedBadge = (siteKey: string, options: BadgeOptions = {}): string => {
   const palette = PALETTES[options.theme ?? "light"];
-  const title = `${siteKey || "This site"} has not been judged by Jev yet`;
+  const title = `${siteKey || "This site"} is not on jevboard yet`;
+  const shared = { valueBg: palette.line, valueInk: palette.soft, palette, title, href: options.href };
 
   switch (options.style ?? "default") {
     case "compact":
-      return pill({ left: "", right: "not judged", rightBg: NOT_JUDGED, rightInk: INK, palette, title, href: options.href, height: 20 });
+      return pill({ ...shared, label: "", value: "not ranked", height: 20 });
     case "big":
       return card({
         palette,
         title,
         href: options.href,
-        scoreBg: NOT_JUDGED,
-        scoreInk: INK,
-        score: "???",
-        headline: "Not judged",
-        subline: "JEV HASN'T SEEN THIS ONE",
-        caption: "Pay $5. Get judged by Jev.",
+        chip: "Not ranked yet",
+        medal: null,
+        score: "?",
+        scoreInk: palette.soft,
+        site: siteKey || "This site",
+        caption: "Get ranked by Jev for $5.",
       });
     default:
-      return pill({
-        left: "JEV SCORE",
-        right: "not judged yet",
-        rightBg: NOT_JUDGED,
-        rightInk: INK,
-        palette,
-        title,
-        href: options.href,
-        height: 22,
-      });
+      return pill({ ...shared, label: "jevboard", value: "not ranked yet", height: 20 });
   }
 };

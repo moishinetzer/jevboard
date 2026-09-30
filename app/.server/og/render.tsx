@@ -8,8 +8,9 @@
  *  1. an in-memory LRU of PNG promises (per process / isolate, dedupes
  *     concurrent renders of the same card);
  *  2. the Workers Cache API (`caches.default`) when running on Cloudflare.
- * Keys include everything drawn on the card, so a retrial or a rank change
- * produces a new key instead of serving a stale image.
+ * Keys include everything drawn on the card (the judgment id stands in for its
+ * name and TL;DR), so a retrial or a rank change produces a new key instead of
+ * serving a stale image.
  */
 import { render } from "@cf-wasm/og";
 import type { ReactElement } from "react";
@@ -88,12 +89,9 @@ export const cachedCard = (key: string, origin: string, make: () => Promise<Png>
 
 /** Everything that changes the verdict card's pixels. */
 export const entryCardKey = (judgmentId: string, props: EntryCardProps): string =>
-  ["entry", props.siteKey, judgmentId, props.rank, props.total, props.host].join("|");
+  ["entry", props.siteKey, judgmentId, props.rank, props.score, props.name].join("|");
 
-export const defaultCardKey = (props: DefaultCardProps): string =>
-  ["site", props.entries, props.judgments, props.revenueCents, props.king?.siteKey ?? "", props.king?.score ?? "", props.host].join(
-    "|",
-  );
+export const defaultCardKey = (props: DefaultCardProps): string => ["site", props.king?.siteKey ?? ""].join("|");
 
 /** The verdict share card for one entry, keyed by (siteKey, judgmentId) plus its current rank. */
 export const entryCardPng = (judgmentId: string, props: EntryCardProps, origin: string): Promise<Png> =>

@@ -21,22 +21,12 @@ export const loader = effectLoader("og", ({ params }: Route.LoaderArgs) =>
     const entry = found.value;
 
     const [latest] = yield* board.judgments(entry.id);
-    const { total } = yield* board.page({ page: 1, pageSize: 1 });
     const { origin } = yield* CurrentRequest;
 
     const png = yield* Effect.promise(() =>
       entryCardPng(
         latest?.id ?? `${entry.id}:${entry.rolls}`,
-        {
-          siteKey: entry.siteKey,
-          score: entry.score,
-          rank: entry.rank,
-          total,
-          tldr: entry.tldr,
-          serial: latest?.serial ?? entry.entryNumber,
-          roll: entry.rolls,
-          host: new URL(origin).host,
-        },
+        { siteKey: entry.siteKey, name: entry.name, score: entry.score, rank: entry.rank, tldr: entry.tldr },
         origin,
       ),
     );

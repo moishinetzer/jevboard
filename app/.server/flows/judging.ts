@@ -1,5 +1,5 @@
 import { Effect, Option } from "effect";
-import type { BoardEntry, Duel, Judgment, Order, OrderStatus } from "../domain/models";
+import type { BoardEntry, Judgment, Order, OrderStatus } from "../domain/models";
 import { Board } from "../services/Board";
 import { JudgmentQueue } from "../services/JudgmentQueue";
 import { Orders } from "../services/Orders";
@@ -19,7 +19,8 @@ export interface JudgingView {
     readonly judgment: Judgment;
     /** None when Jev declined to list the site. */
     readonly entry: BoardEntry | null;
-    readonly duels: ReadonlyArray<Duel>;
+    /** For a new #2 or #3: the names of the businesses still ahead of it. */
+    readonly above: ReadonlyArray<string>;
     readonly totalEntries: number;
   } | null;
 }
@@ -91,13 +92,13 @@ export const loadJudging = Effect.fn("loadJudging")(function* (orderId: string) 
   if (order.status === "complete" && order.judgmentId) {
     const judgment = yield* board.judgment(order.judgmentId);
     if (Option.isSome(judgment)) {
-      const entry = yield* board.findBySiteKey(order.siteKey);
-      const duels = yield* board.duelsForJudgment(judgment.value.id);
+      const entry = Option.getOrNull(yield* board.findBySiteKey(order.siteKey));
+      const above = entry && entry.rank > 1 && entry.rank <= 3 ? (yield* board.top(entry.rank - 1)).map((e) => e.name) : [];
       const stats = yield* board.stats;
       result = {
         judgment: judgment.value,
-        entry: Option.getOrNull(entry),
-        duels,
+        entry,
+        above,
         totalEntries: stats.entries,
       };
     }

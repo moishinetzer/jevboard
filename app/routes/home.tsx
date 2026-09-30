@@ -10,14 +10,14 @@ export const loader = effectLoader("home", () => loadBoard(null));
 export const shouldRevalidate: ShouldRevalidateFunction = ({ formAction, defaultShouldRevalidate }) =>
   formAction === "/judge" ? false : defaultShouldRevalidate;
 
-const TITLE = "Jevboard: how useful is your business?";
+const TITLE = "Jevboard: think you're #1? Prove it for $5.";
 const DESCRIPTION =
-  "Jev, an AI judge, reads your website, sums up what you do and scores how useful your business is from 1 to 1000. Every business lands on the public leaderboard.";
+  "No bidding, no ads, no buying your way up. Jev, an AI judge, reads your site and ranks how useful your business really is.";
 
 export const meta: Route.MetaFunction = ({ loaderData }) => {
   const origin = loaderData?.origin ?? "";
   const leader = loaderData?.listing.page === 1 ? loaderData.listing.entries[0] : undefined;
-  const description = leader ? `${DESCRIPTION} Currently #1: ${leader.name} at ${leader.score}/1000.` : DESCRIPTION;
+  const description = leader ? `${DESCRIPTION} Currently #1: ${leader.name}.` : DESCRIPTION;
   const image = `${origin}/og.png`;
   return [
     { title: TITLE },
@@ -28,12 +28,12 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
     { property: "og:description", content: description },
     { property: "og:url", content: `${origin}/` },
     { property: "og:image", content: image },
-    { property: "og:image:alt", content: "Jevboard: the leaderboard of useful businesses, judged by Jev." },
+    { property: "og:image:alt", content: "Jevboard: think you're #1? Prove it for $5." },
     { name: "twitter:card", content: "summary_large_image" },
     { name: "twitter:title", content: TITLE },
     { name: "twitter:description", content: description },
     { name: "twitter:image", content: image },
-    { name: "theme-color", content: "#ffd400" },
+    { name: "theme-color", content: "#fcfaf3" },
     { tagName: "link", rel: "canonical", href: `${origin}/` },
   ];
 };

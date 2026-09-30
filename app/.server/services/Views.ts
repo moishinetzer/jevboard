@@ -24,6 +24,8 @@ export class Views extends Context.Service<
     readonly record: (siteKeys: ReadonlyArray<string>) => Effect.Effect<void>;
     /** The last `days` days, oldest first, with zeros for days nobody looked. */
     readonly daily: (siteKey: string, days: number) => Effect.Effect<ReadonlyArray<ViewDay>>;
+    /** Total views over the last `days` days for each site key (missing keys had none). */
+    readonly totals: (siteKeys: ReadonlyArray<string>, days: number) => Effect.Effect<ReadonlyMap<string, number>>;
   }
 >()("jevboard/Views") {
   static readonly layer = Layer.effect(
@@ -58,7 +60,17 @@ export class Views extends Context.Service<
         });
       }, Effect.orDie);
 
-      return Views.of({ record, daily });
+      const totals = Effect.fn("Views.totals")(function* (siteKeys: ReadonlyArray<string>, days: number) {
+        if (siteKeys.length === 0) return new Map<string, number>();
+        const first = utcDay(Date.now() - (days - 1) * DAY_MS);
+        const rows = yield* sql<{ readonly siteKey: string; readonly views: number }>`
+          SELECT site_key, SUM(count) AS views FROM views
+          WHERE day >= ${first} AND site_key IN ${sql.in(siteKeys)}
+          GROUP BY site_key`;
+        return new Map(rows.map((row) => [row.siteKey, Number(row.views)]));
+      }, Effect.orDie);
+
+      return Views.of({ record, daily, totals });
     }),
   );
 }

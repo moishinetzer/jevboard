@@ -1,14 +1,14 @@
 # Jevboard
 
-**Paste your site. Pay $5. Jev decides what it's worth.**
+**Think you're #1? Prove it for $5.**
 
-Jevboard is a public leaderboard of businesses ranked by _Jev_, an AI judge. You give it nothing but a URL.
-Jev crawls the site, writes a TL;DR, roasts it a little, and scores how useful the business is from **1 to
-1000**. If you tie someone to the exact point, Jev puts you both in **the Duel Pit** and runs head-to-head
-duels until you find your place. Don't like your score? **$5 buys a retrial** — as many times as you want.
-The newest verdict stands, even when it's worse.
+Jevboard is a public leaderboard of businesses ranked by _Jev_, an AI judge. No bidding, no ads, no buying
+your way up. You give it nothing but a URL: Jev reads the site, writes a TL;DR, roasts it a little and decides
+where the business ranks. Whoever added a business can pay $5 again for a rejudge, and the newest verdict
+stands, even when it's worse.
 
-> You can't buy #1. You can only buy Jev's attention.
+Under the hood Jev scores each site from 1 to 1000 and settles exact ties with head-to-head comparisons. The
+site never explains the scale or the tiebreaks; it only shows the ranking.
 
 ## Why it's built this way
 
@@ -17,16 +17,18 @@ Jevboard borrows the mechanics that made pay-for-attention sites go viral
 
 | Viral mechanic | Where it came from | In Jevboard |
 | --- | --- | --- |
-| A rule you can say in one sentence | outbid.lol, Million Dollar Homepage | "How useful is your business?" and one input at the top of the page |
+| A rule you can say in one sentence | outbid.lol, Million Dollar Homepage | "Think you're #1? Prove it for $5." and one input at the top of the page |
 | Visible reach | MDH "sold/available", outbid's footer revenue line | Views over time for the whole board and for every business, on the page |
 | Shareable artifact | Wordware roast (8.1M users), The Pudding | Dynamic OG cards per verdict, one-click share text, embeddable score badges |
 | Being judged is entertainment (bad scores too) | Hot or Not, How Bad Is Your Spotify | A plain TL;DR first, then the score, the reasoning and Jev's one-line take |
-| Pairwise duels | Facemash, pitchpit | Exact-score ties are settled by Jev in logged head-to-head duels |
+| Pairwise duels | Facemash, pitchpit | Exact-score ties are settled by Jev in logged head-to-head comparisons (not shown on the site) |
 | Escalation | outbid's "pay the difference", HYROX price doubling | Whoever added a business can pay again for a rejudge; the newest verdict stands |
 | Absurdity and self-awareness | .lol domains, I Am Rich | Jev's voice, and prompt-injection attempts are flagged on the verdict |
 
-The whole site is one page: what Jev does and the $5 form, then the leaderboard. Clicking a business opens its
-verdict in place; `/s/<site>` is the same page with that business open, so shared links work.
+The whole site is one page: the pitch and the $5 form, then the board. The top three get gold, silver and
+bronze crowns. Clicking a business opens its verdict in place; `/s/<site>` is the same page with that business
+open, so shared links work. The look (warm paper, Bricolage Grotesque and Instrument Sans, one yellow button)
+takes its cue from outbid.lol's first week, and dark mode follows the OS.
 
 ## How a judgment works
 

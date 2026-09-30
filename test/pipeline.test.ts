@@ -74,10 +74,13 @@ describe("Pipeline", () => {
       const board = yield* Board;
       const c = yield* board.getBySiteKey("c.com");
       const [latest] = yield* board.judgments(c.id);
-      const duels = yield* board.duelsForJudgment(latest!.id);
+      const a = yield* board.getBySiteKey("a.com");
+      const sql = yield* SqlClient.SqlClient;
+      const duels = yield* sql<{ readonly winnerId: string; readonly opponentId: string }>`
+        SELECT winner_id, opponent_id FROM duels WHERE judgment_id = ${latest!.id} ORDER BY seq`;
       assert.strictEqual(duels.length, 1);
       assert.strictEqual(duels[0]!.winnerId, c.id);
-      assert.strictEqual(duels[0]!.opponentSiteKey, "a.com");
+      assert.strictEqual(duels[0]!.opponentId, a.id);
     }).pipe(Effect.provide(makeTestLayer(s)));
   });
 

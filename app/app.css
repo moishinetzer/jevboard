@@ -1,127 +1,93 @@
-@import "@fontsource/anton/400.css";
-@import "@fontsource/space-grotesk/400.css";
-@import "@fontsource/space-grotesk/500.css";
-@import "@fontsource/space-grotesk/700.css";
-@import "@fontsource/jetbrains-mono/500.css";
-@import "@fontsource/jetbrains-mono/700.css";
+@import "@fontsource/bricolage-grotesque/500.css";
+@import "@fontsource/bricolage-grotesque/700.css";
+@import "@fontsource/bricolage-grotesque/800.css";
+@import "@fontsource/instrument-sans/400.css";
+@import "@fontsource/instrument-sans/400-italic.css";
+@import "@fontsource/instrument-sans/500.css";
+@import "@fontsource/instrument-sans/600.css";
+@import "@fontsource/instrument-sans/700.css";
 @import "tailwindcss";
 
-/* Dark mode follows the OS unless the toggle forces a theme. */
-@custom-variant dark {
-  &:where([data-theme="dark"], [data-theme="dark"] *) {
-    @slot;
-  }
-  @media (prefers-color-scheme: dark) {
-    &:where(:root:not([data-theme="light"]), :root:not([data-theme="light"]) *) {
-      @slot;
-    }
-  }
-}
-
 /*
- * Jevboard design tokens.
- * A loud, tabloid-billboard look: warm paper, heavy ink, highlighter yellow,
- * hard offset shadows. Everything is driven by CSS variables so dark mode is
- * just a token swap.
+ * Jevboard design tokens: warm paper, soft ink, one amber accent and
+ * highlighter yellow for the thing to press. Gold, silver and bronze tint the
+ * top three. Dark mode follows the OS and is just a token swap.
  */
 :root {
-  --paper: #fbf6e7;
-  --paper-2: #f2ead3;
-  --ink: #111110;
-  --ink-soft: #4a463d;
-  --jev: #ffd400;
-  --jev-deep: #f2b800;
-  --hot: #ff3b1f;
-  --up: #00a95c;
-  --down: #e5261a;
-  --card: #fffdf6;
-  --line: #111110;
-  --shadow: #111110;
-  /* Hard shadow under yellow buttons. */
-  --btn-shadow: #111110;
+  --paper: #fcfaf3;
+  --card: #ffffff;
+  --ink: #1d1b16;
+  --soft: #6b6658;
+  --line: #ebe5d4;
+  --pill: #f3eedf;
+  --accent: #b45309;
+  --accent-hover: #92400e;
+  --track: #f1ead6;
+  --bad: #b42318;
+  --gold-bg: #fff7d1;
+  --gold-line: #f3d774;
+  --silver-bg: #f4f5f7;
+  --silver-line: #d9dde3;
+  --bronze-bg: #fcf0e4;
+  --bronze-line: #ebc7a3;
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --paper: #12110e;
-    --paper-2: #1b1a15;
-    --ink: #f6f1e1;
-    --ink-soft: #b9b2a0;
-    --card: #1a1914;
-    --line: #f6f1e1;
-    --shadow: #ffd400;
-    --btn-shadow: #f6f1e1;
+  :root {
+    --paper: #14130f;
+    --card: #1c1b16;
+    --ink: #f4f1e6;
+    --soft: #a9a393;
+    --line: #34312a;
+    --pill: #221f18;
+    --accent: #f5b93a;
+    --accent-hover: #ffd27a;
+    --track: #34312a;
+    --bad: #ff8a7a;
+    --gold-bg: rgba(255, 212, 0, 0.09);
+    --gold-line: rgba(255, 212, 0, 0.35);
+    --silver-bg: rgba(201, 206, 214, 0.08);
+    --silver-line: rgba(201, 206, 214, 0.3);
+    --bronze-bg: rgba(208, 137, 74, 0.1);
+    --bronze-line: rgba(208, 137, 74, 0.38);
     color-scheme: dark;
   }
 }
 
-:root[data-theme="dark"] {
-  --paper: #12110e;
-  --paper-2: #1b1a15;
-  --ink: #f6f1e1;
-  --ink-soft: #b9b2a0;
-  --card: #1a1914;
-  --line: #f6f1e1;
-  --shadow: #ffd400;
-  --btn-shadow: #f6f1e1;
-  color-scheme: dark;
-}
-
 @theme {
-  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif,
-    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-  --font-display: "Anton", "Impact", "Haettenschweiler", "Arial Narrow Bold",
-    sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+    "Segoe UI Symbol", "Noto Color Emoji";
+  --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
 
   --color-paper: var(--paper);
-  --color-paper-2: var(--paper-2);
-  --color-ink: var(--ink);
-  --color-ink-soft: var(--ink-soft);
-  --color-jev: var(--jev);
-  --color-jev-deep: var(--jev-deep);
-  --color-hot: var(--hot);
-  --color-up: var(--up);
-  --color-down: var(--down);
   --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-soft: var(--soft);
   --color-line: var(--line);
+  --color-pill: var(--pill);
+  --color-accent: var(--accent);
+  --color-track: var(--track);
+  --color-bad: var(--bad);
+  /* Highlighter yellow and the ink that sits on it, the same in both themes. */
+  --color-jev: #ffd400;
+  --color-on-jev: #1d1b16;
+  --color-gold-bg: var(--gold-bg);
+  --color-gold-line: var(--gold-line);
+  --color-silver-bg: var(--silver-bg);
+  --color-silver-line: var(--silver-line);
+  --color-bronze-bg: var(--bronze-bg);
+  --color-bronze-line: var(--bronze-line);
 
-  --animate-marquee: marquee 45s linear infinite;
-  --animate-pop: pop 0.5s cubic-bezier(0.2, 1.4, 0.4, 1) both;
-  --animate-wiggle: wiggle 2.4s ease-in-out infinite;
-  --animate-blink: blink 1.1s steps(2, start) infinite;
+  --animate-bob: bob 2.6s ease-in-out infinite;
 
-  @keyframes marquee {
-    from {
-      transform: translateX(0);
-    }
-    to {
-      transform: translateX(-50%);
-    }
-  }
-  @keyframes pop {
-    from {
-      transform: scale(0.6);
-      opacity: 0;
-    }
-    to {
-      transform: scale(1);
-      opacity: 1;
-    }
-  }
-  @keyframes wiggle {
+  @keyframes bob {
     0%,
     100% {
-      transform: rotate(-3deg);
+      transform: translateY(0) rotate(-2deg);
     }
     50% {
-      transform: rotate(3deg);
-    }
-  }
-  @keyframes blink {
-    to {
-      visibility: hidden;
+      transform: translateY(-4px) rotate(2deg);
     }
   }
 }
@@ -139,97 +105,86 @@ body {
 }
 
 :focus-visible {
-  outline: 3px solid var(--hot);
+  outline: 2.5px solid var(--accent);
   outline-offset: 2px;
 }
 
 ::selection {
-  background: var(--jev);
-  color: #111110;
+  background: #ffd400;
+  color: #1d1b16;
 }
 
 @layer components {
-  /* A chunky bordered card with a hard offset shadow. */
-  .slab {
-    background: var(--card);
-    border: 3px solid var(--line);
-    box-shadow: 6px 6px 0 var(--shadow);
-  }
-  .slab-sm {
-    background: var(--card);
-    border: 2px solid var(--line);
-    box-shadow: 3px 3px 0 var(--shadow);
-  }
+  /* The one thing to press: a yellow pill. */
   .btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    border: 3px solid #111110;
-    background: var(--jev);
-    color: #111110;
+    border-radius: 999px;
+    background: #ffd400;
+    color: #1d1b16;
     font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-    box-shadow: 4px 4px 0 var(--btn-shadow);
+    white-space: nowrap;
+    cursor: pointer;
     transition:
-      transform 0.08s ease,
-      box-shadow 0.08s ease;
+      background-color 0.12s ease,
+      transform 0.08s ease;
   }
   .btn:hover {
-    transform: translate(-1px, -1px);
-    box-shadow: 5px 5px 0 var(--btn-shadow);
+    background: #ffdf3d;
   }
   .btn:active {
-    transform: translate(3px, 3px);
-    box-shadow: 1px 1px 0 var(--btn-shadow);
+    transform: translateY(1px);
   }
   .btn:disabled {
     opacity: 0.6;
     cursor: progress;
   }
+  /* Everything else you can press: a quiet outlined pill. */
   .btn-ghost {
     background: var(--card);
     color: var(--ink);
-    border-color: var(--line);
-    box-shadow: 4px 4px 0 var(--shadow);
+    font-weight: 600;
+    border: 1.5px solid var(--line);
   }
-  .btn-hot {
-    background: var(--hot);
-    color: #fff;
+  .btn-ghost:hover {
+    background: var(--card);
+    border-color: var(--soft);
   }
-  .sticker {
-    display: inline-block;
-    border: 2px solid #111110;
-    background: var(--jev);
-    color: #111110;
-    font-weight: 700;
-    text-transform: uppercase;
-    font-size: 0.7rem;
-    letter-spacing: 0.06em;
-    padding: 0.15rem 0.45rem;
+  /* A white rounded panel (the board, the FAQ, the verdict). */
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 26px;
+    box-shadow: 0 1px 3px rgba(29, 27, 22, 0.05);
   }
-  .score-num {
+  /* Small rounded label above a headline. */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: var(--pill);
+    color: var(--soft);
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .link {
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .link:hover {
+    color: var(--accent-hover);
+  }
+  .headline {
     font-family: var(--font-display);
-    font-variant-numeric: tabular-nums;
-    line-height: 0.85;
-  }
-  .tabular {
-    font-family: var(--font-mono);
-    font-variant-numeric: tabular-nums;
-  }
-  /* Highlighter band; the ink stays dark so it reads on both themes. */
-  .highlight {
-    background: var(--jev);
-    color: #111110;
-    padding: 0 0.15em;
-    box-decoration-break: clone;
-    -webkit-box-decoration-break: clone;
-  }
-  .halftone {
-    background-image: radial-gradient(var(--ink) 1px, transparent 1.2px);
-    background-size: 10px 10px;
-    opacity: 0.08;
+    font-weight: 800;
+    letter-spacing: -0.035em;
+    line-height: 1.02;
+    text-wrap: balance;
   }
 }
 

@@ -3,9 +3,8 @@ import { Link, useRouteLoaderData } from "react-router";
 import { loadJudging, retryOrder } from "~/.server/flows/judging";
 import { CurrentRequest, effectAction, effectLoader } from "~/.server/http";
 import { Board } from "~/.server/services/Board";
-import { JevFace } from "~/components/logo";
-import { AwaitingPayment, Mistrial, ProgressRail, Theatre, usePolling } from "~/components/verdict/judging-theatre";
-import { VerdictReveal } from "~/components/verdict/score-reveal";
+import { AwaitingPayment, Failed, usePolling, Verdict, Working } from "~/components/judging";
+import { PageHeader } from "~/components/shell";
 import { entryPath } from "~/lib/site-key";
 import type { loader as rootLoader } from "~/root";
 import type { Route } from "./+types/judging";
@@ -14,13 +13,13 @@ export const loader = effectLoader("judging", ({ params }: Route.LoaderArgs) =>
   Effect.gen(function* () {
     const view = yield* loadJudging(params.orderId);
     const { origin } = yield* CurrentRequest;
-    // While a retrial is in flight, show what's at stake: the standing score.
+    // While a rejudge is in flight, show what's at stake: where it stands now.
     const standing = view.done ? Option.none() : yield* (yield* Board).findBySiteKey(view.order.siteKey);
     const current = Option.match(standing, {
       onNone: () => null,
       onSome: (entry) => ({ score: entry.score, rank: entry.rank }),
     });
-    return { ...view, current, origin, now: Date.now() };
+    return { ...view, current, origin };
   }),
 );
 
@@ -32,78 +31,66 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
   const siteKey = loaderData?.order.siteKey;
   const status = loaderData?.order.status;
   const title = !siteKey
-    ? "Judging — Jevboard"
+    ? "Judging | Jevboard"
     : status === "complete"
-      ? `${siteKey} — Jev has spoken | Jevboard`
+      ? `${siteKey}: Jev has spoken | Jevboard`
       : status === "failed"
-        ? `${siteKey} — mistrial | Jevboard`
-        : `${siteKey} — Jev is judging… | Jevboard`;
+        ? `${siteKey}: no verdict | Jevboard`
+        : `${siteKey}: Jev is judging | Jevboard`;
   return [{ title }, { name: "robots", content: "noindex, nofollow" }];
 };
 
 export default function Judging({ loaderData }: Route.ComponentProps) {
-  const { order, steps, done, result, current, origin, now } = loaderData;
+  const { order, done, result, current, origin } = loaderData;
   const shell = useRouteLoaderData<typeof rootLoader>("root");
   usePolling(!done, 1500);
 
   return (
-    <main className="mx-auto max-w-4xl px-4 py-8 sm:py-12">
-      <header className="mb-8 sm:mb-10">
-        <p className="font-mono text-xs font-bold tracking-widest uppercase">
-          <span className="bg-ink px-1.5 py-0.5 text-paper">
-            {order.kind === "reroll" ? "Retrial" : "First judgment"}
-          </span>
-          <span className="ml-2 text-ink-soft">Case: Jev v.</span>
+    <>
+      <PageHeader />
+      <main
+        className={`mx-auto flex w-full flex-col items-center px-4 text-center ${
+          order.status === "complete" ? "max-w-[700px] pt-12 sm:pt-16" : "max-w-[680px] pt-14 sm:pt-[90px]"
+        }`}
+      >
+        <p role="status" className="sr-only">
+          {announcement(loaderData)}
         </p>
-        <h1 className="mt-2 font-display text-5xl leading-[0.9] uppercase [overflow-wrap:anywhere] sm:text-7xl">
-          {order.siteKey}
-        </h1>
-      </header>
-
-      <ProgressRail steps={steps} />
-      <p role="status" className="sr-only">
-        {announcement(loaderData)}
-      </p>
-
-      <div className="mt-10">
         {order.status === "pending_payment" ? (
-          <AwaitingPayment orderId={order.id} simulated={shell?.mode.payments === "fake"} />
+          <AwaitingPayment order={order} simulated={shell?.mode.payments === "fake"} />
         ) : order.status === "failed" ? (
-          <Mistrial order={order} />
+          <Failed order={order} />
         ) : order.status === "complete" ? (
           result ? (
-            <VerdictReveal order={order} result={result} origin={origin} />
+            <Verdict order={order} result={result} origin={origin} />
           ) : (
             <VerdictMissing siteKey={order.siteKey} />
           )
         ) : (
-          <Theatre order={order} current={order.kind === "reroll" ? current : null} now={now} />
+          <Working order={order} current={order.kind === "reroll" ? current : null} />
         )}
-      </div>
-    </main>
+      </main>
+    </>
   );
 }
 
-/** One line for screen readers when the case closes (the theatre narrates the steps before that). */
+/** One line for screen readers when the judgment finishes (the page narrates the steps before that). */
 const announcement = ({ order, result }: Route.ComponentProps["loaderData"]): string => {
-  if (order.status === "failed") return `Mistrial: ${order.error ?? "Jev couldn't finish."}`;
+  if (order.status === "failed") return `No verdict: ${order.error ?? "Jev couldn't finish."}`;
   if (order.status !== "complete" || !result) return "";
-  if (!result.entry) return "Case dismissed: Jev declined to list this site.";
-  return `Jev has spoken: ${result.judgment.score} out of 1000, rank ${result.entry.rank} of ${result.totalEntries}.`;
+  if (!result.entry) return "Jev declined to list this site.";
+  return `Jev has spoken: ${order.siteKey} is #${result.entry.rank} of ${result.totalEntries}, with ${result.judgment.score}.`;
 };
 
-/** Complete, but the judgment row couldn't be loaded (shouldn't happen): point at the verdict page. */
+/** Complete, but the judgment row couldn't be loaded (shouldn't happen): point at the board. */
 function VerdictMissing({ siteKey }: { siteKey: string }) {
   return (
-    <section className="slab flex flex-col items-start gap-4 p-6 sm:flex-row sm:items-center sm:p-8">
-      <JevFace size={72} className="shrink-0" />
-      <div>
-        <h2 className="font-display text-4xl uppercase">Jev has spoken.</h2>
-        <p className="mt-2 text-lg">The verdict is filed on the board.</p>
-        <Link to={entryPath(siteKey)} className="btn mt-4 px-5 py-3">
-          See the verdict →
-        </Link>
-      </div>
-    </section>
+    <>
+      <span className="tag bg-jev font-bold text-on-jev">Jev has spoken</span>
+      <h1 className="headline mt-[18px] text-[40px] [overflow-wrap:anywhere] sm:text-[56px]">The verdict is on the board</h1>
+      <Link to={entryPath(siteKey)} className="btn mt-8 h-[54px] px-[30px] text-[17px]">
+        See it on the board
+      </Link>
+    </>
   );
 }

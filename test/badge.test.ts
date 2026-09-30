@@ -54,7 +54,7 @@ describe("escapeXml", () => {
 describe("textWidth", () => {
   it("grows with length and is zero for empty text", () => {
     expect(textWidth("")).toBe(0);
-    expect(textWidth("JEV SCORE")).toBeGreaterThan(textWidth("JEV"));
+    expect(textWidth("jevboard")).toBeGreaterThan(textWidth("jev"));
   });
 
   it("measures wide glyphs wider than narrow ones", () => {
@@ -106,14 +106,23 @@ describe("buildBadge", () => {
   it("renders the default shields-style badge", () => {
     const svg = buildBadge(entry);
     expect(svg.startsWith('<svg xmlns="http://www.w3.org/2000/svg"')).toBe(true);
-    expect(svg).toContain(">JEV SCORE</text>");
-    expect(svg).toContain(">812/1000 · #14</text>");
+    expect(svg).toContain(">jevboard</text>");
+    expect(svg).toContain(">#14 · 812</text>");
     expect(svg).toContain('role="img"');
-    expect(svg).toContain("<title>Rated 812/1000 by Jev · #14 of 931 on Jevboard (stripe.com)</title>");
-    // Tier colour for 700-849 ("Genuinely Useful").
-    expect(svg).toContain("#ff9f1c");
+    expect(svg).toContain("<title>stripe.com is #14 of 931 on jevboard, with a score of 812</title>");
+    // Accent value segment on the light theme.
+    expect(svg).toContain('fill="#b45309"');
     assertBalanced(svg);
-    expect(size(svg).height).toBe(24);
+    expect(size(svg).height).toBe(20);
+  });
+
+  it("never mentions the old scale, tiers or caps wordmark", () => {
+    for (const style of ["default", "compact", "big"] as const) {
+      for (const theme of ["light", "dark"] as const) {
+        const svg = buildBadge({ ...entry, score: 1000, rank: 1 }, { style, theme }) + buildNotJudgedBadge("acme.com", { style, theme });
+        expect(svg).not.toMatch(/\/\s?1000|JEV SCORE|JEVBOARD|Genuinely Useful|Civilizational|Why Does This Exist/);
+      }
+    }
   });
 
   it("sizes the pill to its text", () => {
@@ -121,7 +130,7 @@ describe("buildBadge", () => {
     const long = size(buildBadge({ ...entry, score: 1000, rank: 12345 }));
     expect(long.width).toBeGreaterThan(short.width);
     // Label + value text plus padding always fit inside the badge.
-    const minimum = textWidth("JEV SCORE", 11, true) + textWidth("1000/1000 · #12345", 11, true);
+    const minimum = textWidth("jevboard", 11, true) + textWidth("#12345 · 1000", 11, true);
     expect(long.width).toBeGreaterThan(minimum);
   });
 
@@ -129,26 +138,46 @@ describe("buildBadge", () => {
     const light = buildBadge(entry, { theme: "light" });
     const dark = buildBadge(entry, { theme: "dark" });
     expect(light).not.toBe(dark);
-    expect(dark).toContain("#1a1914");
-    expect(dark).toContain('stroke="#f6f1e1"');
+    expect(dark).toContain('fill="#f5b93a"');
+    expect(dark).toContain('stroke="#34312a"');
+    expect(light).toContain('stroke="#ebe5d4"');
   });
 
   it("has a compact variant that is narrower than the default", () => {
     const compact = buildBadge(entry, { style: "compact" });
-    expect(compact).toContain(">812 · #14</text>");
-    expect(compact).not.toContain("JEV SCORE");
+    expect(compact).toContain(">#14 · 812</text>");
+    expect(compact).not.toContain(">jevboard</text>");
     expect(size(compact).width).toBeLessThan(size(buildBadge(entry)).width);
     assertBalanced(compact);
   });
 
-  it("has a big card variant with rank, score and tier", () => {
+  it("has a big card variant with rank, score and site", () => {
     const big = buildBadge(entry, { style: "big", theme: "dark" });
     expect(size(big)).toEqual(BIG_BADGE_SIZE);
     expect(big).toContain(">812</text>");
-    expect(big).toContain(">#14 of 931</text>");
-    expect(big).toContain(">GENUINELY USEFUL</text>");
-    expect(big).toContain("Judged by Jev on Jevboard");
+    expect(big).toContain(">#14 on the board</text>");
+    expect(big).toContain(">stripe.com</text>");
+    expect(big).toContain(">jevboard</text>");
+    // No crown outside the top three.
+    expect(big).not.toContain("M2 16 L4 4");
     assertBalanced(big);
+  });
+
+  it("crowns and medal-tints the top three on the big card", () => {
+    const tints = { 1: "#fff7d1", 2: "#f4f5f7", 3: "#fcf0e4" } as const;
+    for (const rank of [1, 2, 3] as const) {
+      const big = buildBadge({ ...entry, rank }, { style: "big" });
+      expect(big).toContain("M2 16 L4 4");
+      expect(big).toContain(`fill="${tints[rank]}"`);
+      assertBalanced(big);
+    }
+  });
+
+  it("keeps long site keys inside the big card", () => {
+    const big = buildBadge({ ...entry, siteKey: "chromewebstore.google.com/detail/some-extension", score: 1000 }, { style: "big" });
+    const site = />([^<]*…)<\/text>/.exec(big)?.[1];
+    expect(site).toBeDefined();
+    expect(textWidth(site!, 12, true) + textWidth("1000", 44, true)).toBeLessThan(BIG_BADGE_SIZE.width - 28);
   });
 
   it("escapes hostile text everywhere it is interpolated", () => {
@@ -168,13 +197,15 @@ describe("buildBadge", () => {
 });
 
 describe("buildNotJudgedBadge", () => {
-  it("renders a grey placeholder in every style", () => {
+  it("renders a muted placeholder in every style", () => {
     for (const style of ["default", "compact", "big"] as const) {
       const svg = buildNotJudgedBadge("acme.com", { style });
-      expect(svg).toContain("#9a968a");
-      expect(svg).toContain("acme.com has not been judged by Jev yet");
+      expect(svg).toContain('fill="#6b6658"');
+      expect(svg).not.toContain('fill="#b45309"');
+      expect(svg).toContain("acme.com is not on jevboard yet");
       assertBalanced(svg);
     }
-    expect(buildNotJudgedBadge("acme.com")).toContain(">not judged yet</text>");
+    expect(buildNotJudgedBadge("acme.com")).toContain(">not ranked yet</text>");
+    expect(buildNotJudgedBadge("acme.com", { style: "compact" })).toContain(">not ranked</text>");
   });
 });

@@ -7,15 +7,13 @@ import {
   Scripts,
   ScrollRestoration,
   type ShouldRevalidateFunction,
-  useRouteLoaderData,
 } from "react-router";
 import type { Route } from "./+types/root";
 import { effectLoader } from "./.server/http";
 import { loadShell } from "./.server/flows/shell";
 import { visitorMiddleware } from "./.server/visitor";
 import { JevFace } from "./components/logo";
-import { ModeBanner, SiteFooter, SiteHeader } from "./components/shell";
-import { themeBootScript } from "./components/theme-toggle";
+import { ModeBanner, PageHeader, SiteFooter } from "./components/shell";
 import "./app.css";
 
 export const middleware: Route.MiddlewareFunction[] = [visitorMiddleware];
@@ -35,7 +33,7 @@ export const meta: Route.MetaFunction = () => [
   {
     name: "description",
     content:
-      "Jev, an AI judge, reads your website, sums up what you do and scores how useful your business is from 1 to 1000. Every business lands on the public leaderboard.",
+      "No bidding, no ads, no buying your way up. Jev, an AI judge, reads your website and ranks how useful your business really is.",
   },
   { property: "og:site_name", content: "Jevboard" },
   { property: "og:type", content: "website" },
@@ -50,11 +48,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
         <Meta />
         <Links />
       </head>
-      <body className="min-h-dvh">
+      <body className="flex min-h-dvh flex-col">
         {children}
         <ScrollRestoration />
         <Scripts />
@@ -67,7 +64,6 @@ export default function App({ loaderData }: Route.ComponentProps) {
   return (
     <>
       <ModeBanner mode={loaderData.mode} />
-      <SiteHeader />
       <Outlet />
       <SiteFooter />
     </>
@@ -75,20 +71,19 @@ export default function App({ loaderData }: Route.ComponentProps) {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  const shell = useRouteLoaderData<typeof loader>("root");
   let status = 500;
   let title = "Jev tripped over a cable";
-  let details = "Something broke on our side. Jev has been informed and is furious.";
+  let details = "Something broke on our side. Jev has been told and is not pleased.";
   let stack: string | undefined;
 
   if (isRouteErrorResponse(error)) {
     status = error.status;
     const message = (error.data as { message?: string } | undefined)?.message;
     if (error.status === 404) {
-      title = "Not on the docket";
-      details = message ?? "Jev has no record of this page. Maybe it was never judged — or never existed.";
-    } else {
-      title = error.status >= 500 ? title : "Objection!";
+      title = "Nothing here";
+      details = message ?? "Jev looked everywhere. This page was never judged, or never existed.";
+    } else if (error.status < 500) {
+      title = "Objection";
       details = message ?? error.statusText ?? details;
     }
   } else if (import.meta.env.DEV && error instanceof Error) {
@@ -96,30 +91,23 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     stack = error.stack;
   }
 
-  const body = (
-    <main className="mx-auto max-w-3xl px-4 py-20 text-center">
-      <JevFace size={96} className="mx-auto" />
-      <p className="mt-6 font-mono text-sm font-bold uppercase tracking-widest text-hot">Error {status}</p>
-      <h1 className="mt-2 font-display text-5xl uppercase sm:text-7xl">{title}</h1>
-      <p className="mx-auto mt-4 max-w-xl text-lg text-ink-soft">{details}</p>
-      <div className="mt-8 flex justify-center gap-3">
-        <Link to="/" className="btn px-5 py-3">
-          Back to the leaderboard
-        </Link>
-      </div>
-      {stack ? (
-        <pre className="slab mt-10 overflow-x-auto p-4 text-left text-xs">
-          <code>{stack}</code>
-        </pre>
-      ) : null}
-    </main>
-  );
-
-  if (!shell) return body;
   return (
     <>
-      <SiteHeader />
-      {body}
+      <PageHeader />
+      <main className="mx-auto flex w-full max-w-[640px] flex-col items-center px-4 pt-16 text-center sm:pt-24">
+        <JevFace size={88} mood="flat" label="Jev, unimpressed" />
+        <p className="tag mt-6">Error {status}</p>
+        <h1 className="headline mt-4 text-[40px] sm:text-[52px]">{title}</h1>
+        <p className="mt-3.5 max-w-[500px] text-[17px] leading-relaxed text-soft">{details}</p>
+        <Link to="/" className="btn mt-8 h-14 px-8 text-[17px]">
+          Back to the board
+        </Link>
+        {stack ? (
+          <pre className="panel mt-10 w-full overflow-x-auto p-4 text-left text-xs">
+            <code>{stack}</code>
+          </pre>
+        ) : null}
+      </main>
       <SiteFooter />
     </>
   );

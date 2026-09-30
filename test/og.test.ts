@@ -35,13 +35,10 @@ const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
 const entry: EntryCardProps = {
   siteKey: "stripe.com",
+  name: "Stripe",
   score: 812,
   rank: 14,
-  total: 931,
   tldr: "Online payments infrastructure for businesses of every size, from startups to large enterprises, with APIs for checkout, billing and payouts.",
-  serial: 42,
-  roll: 1,
-  host: "jevboard.com",
 };
 
 afterEach(() => {
@@ -94,10 +91,10 @@ describe("fonts", () => {
     expect(totalBase64).toBeLessThan(160_000);
     const fonts = ogFonts();
     expect(fonts.map((font) => `${font.name}:${font.weight}`)).toEqual([
-      "Anton:400",
-      "Space Grotesk:500",
-      "Space Grotesk:700",
-      "JetBrains Mono:700",
+      "Bricolage Grotesque:700",
+      "Bricolage Grotesque:800",
+      "Instrument Sans:500",
+      "Instrument Sans:700",
     ]);
     for (const font of fonts) {
       const bytes = new Uint8Array(font.data as ArrayBuffer);
@@ -113,9 +110,11 @@ describe("card cache keys", () => {
     expect(entryCardKey("j1", entry)).toBe(base);
     expect(entryCardKey("j2", entry)).not.toBe(base);
     expect(entryCardKey("j1", { ...entry, rank: 13 })).not.toBe(base);
-    expect(entryCardKey("j1", { ...entry, total: 932 })).not.toBe(base);
-    const site = { entries: 1, judgments: 2, revenueCents: 1000, king: { siteKey: "a.com", score: 900 }, host: "jevboard.com" };
-    expect(defaultCardKey(site)).not.toBe(defaultCardKey({ ...site, king: null }));
+    expect(entryCardKey("j1", { ...entry, score: 813 })).not.toBe(base);
+    expect(entryCardKey("j1", { ...entry, name: "Stripe, Inc." })).not.toBe(base);
+    const site = { king: { siteKey: "a.com" } };
+    expect(defaultCardKey(site)).not.toBe(defaultCardKey({ king: null }));
+    expect(defaultCardKey(site)).not.toBe(defaultCardKey({ king: { siteKey: "b.com" } }));
   });
 });
 
@@ -164,18 +163,16 @@ describe("rendering", () => {
     preview("entry.png", png);
   }, 30_000);
 
-  it("survives worst-case copy (long key, long TL;DR, 1000, retrial, emoji)", async () => {
+  it("survives worst-case copy (long name, long TL;DR, 1000, #1, emoji)", async () => {
     const png = await entryCardPng(
       "j2",
       {
         ...entry,
         siteKey: "chromewebstore.google.com/detail/website-roast-ai-ux-landi/gfkbhifofimcdcbapfbkgajomlaflkfo",
+        name: "Website Roast AI: UX Landing Page Feedback and Conversion Optimizer Pro 👀",
         score: 1000,
         rank: 1,
-        total: 123456,
         tldr: "An AI assistant 👀 with a waitlist, a Discord, a token and a podcast, for people who want all four. ".repeat(6),
-        serial: 123456,
-        roll: 17,
       },
       "https://jevboard.com",
     );
@@ -183,12 +180,15 @@ describe("rendering", () => {
     preview("entry-worst.png", png);
   }, 30_000);
 
+  it("falls back to the site key when the name is only emoji, and handles an empty TL;DR", async () => {
+    const png = await entryCardPng("j3", { ...entry, name: "👑🔥", tldr: "", rank: 1234, score: 7 }, "https://jevboard.com");
+    expect(pngSize(png)).toEqual({ width: 1200, height: 630 });
+    preview("entry-bare.png", png);
+  }, 30_000);
+
   it("renders the default site card with and without a king", async () => {
-    const withKing = await defaultCardPng(
-      { entries: 931, judgments: 1204, revenueCents: 602_000, king: { siteKey: "archive.org", score: 925 }, host: "jevboard.com" },
-      "https://jevboard.com",
-    );
-    const empty = await defaultCardPng({ entries: 0, judgments: 0, revenueCents: 0, king: null, host: "jevboard.com" }, "https://jevboard.com");
+    const withKing = await defaultCardPng({ king: { siteKey: "archive.org" } }, "https://jevboard.com");
+    const empty = await defaultCardPng({ king: null }, "https://jevboard.com");
     expect(pngSize(withKing)).toEqual({ width: 1200, height: 630 });
     expect(pngSize(empty)).toEqual({ width: 1200, height: 630 });
     preview("default.png", withKing);

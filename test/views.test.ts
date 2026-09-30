@@ -24,6 +24,12 @@ describe("Views", () => {
       const board = yield* views.daily(BOARD_VIEWS, 7);
       assert.strictEqual(board.at(-1)!.views, 1);
       assert.strictEqual((yield* views.daily("nobody.com", 7)).reduce((sum, day) => sum + day.views, 0), 0);
+
+      const totals = yield* views.totals(["acme.com", BOARD_VIEWS, "nobody.com"], 30);
+      assert.strictEqual(totals.get("acme.com"), 2);
+      assert.strictEqual(totals.get(BOARD_VIEWS), 1);
+      assert.isFalse(totals.has("nobody.com"));
+      assert.strictEqual((yield* views.totals([], 30)).size, 0);
     }).pipe(Effect.provide(layer)),
   );
 });

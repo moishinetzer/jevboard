@@ -58,23 +58,23 @@ const waitForVerdict = (browser: Browser, orderId: string) =>
     const page = await browser.get(`/judging/${orderId}`);
     expect(page.status).toBe(200);
     const title = titleOf(page.html);
-    if (title.includes("mistrial")) throw new Error(`Mistrial for ${orderId}: ${textOf(page.html).slice(0, 500)}`);
+    if (title.includes("no verdict")) throw new Error(`No verdict for ${orderId}: ${textOf(page.html).slice(0, 500)}`);
     return title.includes("Jev has spoken") ? page : undefined;
   });
 
 /**
- * /s/<site> is the board with that business opened in place: its score from the
- * title, with the details section rendered, and its roll count from D1.
+ * /s/<site> is the board with that business opened in place: its rank in the
+ * title, the details section rendered with its score, and its roll count from D1.
  */
 const verdictOf = async (page: Visit, site: string) => {
-  const score = /: (\d+)\/1000 on Jevboard$/.exec(titleOf(page.html));
-  expect(score, `verdict page title: ${titleOf(page.html)}`).not.toBeNull();
+  const rank = /: #(\d+) on Jevboard$/.exec(titleOf(page.html));
+  expect(rank, `verdict page title: ${titleOf(page.html)}`).not.toBeNull();
   expect(page.html).toContain('aria-expanded="true"');
-  expect(textOf(page.html)).toContain("Why this score");
+  expect(textOf(page.html)).toContain(`Why Jev put it at #${rank?.[1]}`);
   const entry = await jev.entry(site);
   expect(entry, `${site} on the board`).not.toBeNull();
-  expect(entry?.score).toBe(Number(score?.[1]));
-  return { score: Number(score?.[1]), rolls: entry?.rolls ?? 0 };
+  expect(page.html).toContain(`>${entry?.score}<`);
+  return { score: entry?.score ?? 0, rolls: entry?.rolls ?? 0 };
 };
 
 /** The hidden URL field of the one-click "Rejudge" form, if the page has one. */
@@ -100,14 +100,16 @@ describe("Jevboard Worker (simulated payments, mock Jev)", () => {
     expect(judging.status).toBe(200);
 
     const reveal = await waitForVerdict(browser, orderId);
-    const announced = /Jev has spoken: (\d+) out of 1000, rank (\d+) of (\d+)\./.exec(textOf(reveal.html));
+    const announced = new RegExp(`Jev has spoken: ${SITE.replace(/\./g, "\\.")} is #(\\d+) of (\\d+), with (\\d+)\\.`).exec(
+      textOf(reveal.html),
+    );
     expect(announced, "verdict announcement on the judging page").not.toBeNull();
     expect(await jev.order(orderId)).toMatchObject({ status: "complete", kind: "new" });
 
     const entry = await browser.get(`/s/${SITE}`);
     expect(entry.status).toBe(200);
     const verdict = await verdictOf(entry, SITE);
-    expect(verdict.score).toBe(Number(announced?.[1]));
+    expect(verdict.score).toBe(Number(announced?.[3]));
     expect(verdict.score).toBeGreaterThanOrEqual(1);
     expect(verdict.score).toBeLessThanOrEqual(1000);
     expect(verdict.rolls).toBe(1);
@@ -223,7 +225,8 @@ describe("Jevboard Worker (simulated payments, mock Jev)", () => {
     expect(badge.headers.get("Content-Type")).toMatch(/^image\/svg\+xml/);
     const svg = await badge.text();
     expect(svg.trimStart()).toMatch(/^<svg\b/);
-    expect(svg).toContain(`${score}/1000`);
+    expect(svg).toContain(`· ${score}<`);
+    expect(svg).not.toContain("/1000");
 
     const sitemap = await fetch(new URL("/sitemap.xml", jev.baseUrl));
     expect(sitemap.status).toBe(200);
@@ -244,7 +247,7 @@ describe("Jevboard Worker (simulated payments, mock Jev)", () => {
 
     const page = await fetch(new URL(`/s/${CLOSED_TAB_SITE}`, jev.baseUrl), { headers: person });
     expect(page.status).toBe(200);
-    expect(textOf(await page.text())).toContain("Views, last 30 days");
+    expect(textOf(await page.text())).toContain("in the last 30 days");
     expect(await jev.views(CLOSED_TAB_SITE)).toBe(site + 1);
     expect(await jev.views("")).toBe(board + 1);
 

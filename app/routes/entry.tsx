@@ -4,6 +4,7 @@ import { effectLoader } from "~/.server/http";
 import { BoardPage } from "~/components/board/board-page";
 import { JudgeForm } from "~/components/judge-form";
 import { JevFace } from "~/components/logo";
+import { PageHeader } from "~/components/shell";
 import { ogPath } from "~/components/verdict/links";
 import { entryPath, normalizeSite } from "~/lib/site-key";
 import type { Route } from "./+types/entry";
@@ -25,7 +26,7 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
   const { origin } = loaderData;
   const url = `${origin}${entryPath(entry.siteKey)}`;
   const image = `${origin}${ogPath(entry.siteKey)}`;
-  const title = `${entry.name}: ${entry.score}/1000 on Jevboard`;
+  const title = `${entry.name}: #${entry.rank} on Jevboard`;
   const description = entry.tldr;
   return [
     { title },
@@ -39,12 +40,12 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
     { property: "og:image", content: image },
     { property: "og:image:width", content: "1200" },
     { property: "og:image:height", content: "630" },
-    { property: "og:image:alt", content: `${entry.siteKey} scored ${entry.score}/1000 (#${entry.rank}) on Jevboard` },
+    { property: "og:image:alt", content: `${entry.name} is #${entry.rank} on Jevboard with ${entry.score}` },
     { name: "twitter:card", content: "summary_large_image" },
     { name: "twitter:title", content: title },
     { name: "twitter:description", content: description },
     { name: "twitter:image", content: image },
-    { name: "theme-color", content: "#ffd400" },
+    { name: "theme-color", content: "#fcfaf3" },
   ];
 };
 
@@ -59,26 +60,44 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const judgeable = notFound && normalized.ok ? normalized.site.siteKey : null;
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-16 text-center sm:py-20">
-      <JevFace size={96} className="mx-auto" />
-      <h1 className="mt-6 font-display text-4xl leading-[0.95] uppercase [overflow-wrap:anywhere] sm:text-6xl">
-        {!notFound ? "This page fell over" : judgeable ? `${judgeable} isn't on the board yet` : "Not on the board"}
-      </h1>
-      <p className="mx-auto mt-4 max-w-lg text-lg text-ink-soft">
-        {!notFound
-          ? "The verdict couldn't be loaded right now. Try again in a moment."
-          : judgeable
-            ? "Add it and Jev will read the site, sum it up and score how useful it is, from 1 to 1000."
-            : "Paste a website below to see where it ranks."}
-      </p>
-      {notFound ? (
-        <div className="slab mt-8 p-5 text-left">
-          {judgeable ? <JudgeForm siteUrl={judgeable} newSite size="md" /> : <JudgeForm size="md" />}
-        </div>
-      ) : null}
-      <Link to="/" className="btn btn-ghost mt-8 px-5 py-3">
-        See the leaderboard
-      </Link>
-    </main>
+    <>
+      <PageHeader />
+      <main className="mx-auto flex w-full max-w-[640px] flex-col items-center px-4 pt-16 text-center sm:pt-[100px]">
+        <JevFace size={88} mood="flat" label="Jev, looking for it" className="size-[72px] sm:size-[88px]" />
+        <h1 className="headline mt-[22px] text-[40px] [overflow-wrap:anywhere] sm:text-[52px]">
+          {!notFound ? (
+            "This page fell over"
+          ) : judgeable ? (
+            <>
+              <span className="text-accent">{judgeable}</span> isn't on the board yet
+            </>
+          ) : (
+            "Not on the board"
+          )}
+        </h1>
+        <p className="mt-3.5 max-w-[500px] text-base leading-relaxed text-soft sm:text-[17px]">
+          {!notFound
+            ? "The board couldn't be loaded right now. Try again in a moment."
+            : judgeable
+              ? "Add it and Jev will read the site, sum up what it does and decide where it ranks. Somebody has to go first."
+              : "Paste a website below to see where it ranks."}
+        </p>
+        {notFound ? (
+          judgeable ? (
+            <JudgeForm
+              siteUrl={judgeable}
+              newSite
+              className="mt-[30px]"
+              buttonClassName="btn min-h-14 max-w-full px-8 py-3 text-[17px] whitespace-normal [overflow-wrap:anywhere]"
+            />
+          ) : (
+            <JudgeForm className="mt-[30px] w-full" />
+          )
+        ) : null}
+        <Link to="/" className="link mt-4 text-sm">
+          {notFound ? "Or see who's on the board" : "Back to the board"}
+        </Link>
+      </main>
+    </>
   );
 }

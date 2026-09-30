@@ -1,53 +1,44 @@
 /**
  * Share-card layouts for satori (1200×630). Satori rules: every element with
  * more than one child needs `display: flex`, only inline styles, and only the
- * fonts registered in ./fonts.
+ * fonts registered in ./fonts (display 700/800, sans 500/700).
  */
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties } from "react";
 import { truncate } from "~/lib/badge";
-import { formatCount, formatMoney, tierFor } from "~/lib/format";
+import { formatCount } from "~/lib/format";
 import { JEV_FACE_DATA_URI } from "./face";
 import { OG_FONT } from "./fonts";
 
 export const OG_WIDTH = 1200;
 export const OG_HEIGHT = 630;
 
-const INK = "#111110";
-const INK_SOFT = "#4a463d";
-const PAPER = "#fbf6e7";
-const CARD = "#fffdf6";
-const JEV = "#ffd400";
-const HOT = "#ff3b1f";
-const MUTED_ON_INK = "#b9b2a0";
+const PAPER = "#fcfaf3";
+const INK = "#1d1b16";
+const SOFT = "#6b6658";
+const LINE = "#ebe5d4";
+const PILL = "#f3eedf";
+const ACCENT = "#b45309";
+
+const PAD_Y = 56;
+const PAD_X = 64;
+const CONTENT_WIDTH = OG_WIDTH - PAD_X * 2;
+
+type Medal = "gold" | "silver" | "bronze";
+
+const medalFor = (rank: number): Medal | null =>
+  rank === 1 ? "gold" : rank === 2 ? "silver" : rank === 3 ? "bronze" : null;
+
+const MEDAL: Record<Medal, { readonly crown: string; readonly bg: string; readonly line: string }> = {
+  gold: { crown: "#fff4b8", bg: "#fff7d1", line: "#f3d774" },
+  silver: { crown: "#c9ced6", bg: "#f4f5f7", line: "#d9dde3" },
+  bronze: { crown: "#d0894a", bg: "#fcf0e4", line: "#ebc7a3" },
+};
 
 const row = (style: CSSProperties = {}): CSSProperties => ({ display: "flex", alignItems: "center", ...style });
 const col = (style: CSSProperties = {}): CSSProperties => ({ display: "flex", flexDirection: "column", ...style });
 
-function Face({ size, rotate = 0 }: { size: number; rotate?: number }) {
-  return (
-    <img
-      src={JEV_FACE_DATA_URI}
-      width={size}
-      height={size}
-      style={rotate ? { width: size, height: size, transform: `rotate(${rotate}deg)` } : { width: size, height: size }}
-    />
-  );
-}
-
-function Wordmark({ size }: { size: number }) {
-  return (
-    <div style={row({ fontFamily: OG_FONT.display, fontSize: size, lineHeight: 1, letterSpacing: -1 })}>
-      <span>JEV</span>
-      <span style={{ color: HOT }}>BOARD</span>
-    </div>
-  );
-}
-
-/** Font size that fits `text` on one line of `width` px, for a face averaging `em` per glyph. */
-const fitFont = (text: string, width: number, em: number, min: number, max: number): number =>
-  Math.max(min, Math.min(max, Math.floor(width / Math.max(1, [...text].length * em))));
-
-const serialLabel = (serial: number): string => `#${String(serial).padStart(4, "0")}`;
+/** Letter spacing in px for an `em` value (satori is happiest with plain numbers). */
+const em = (size: number, value: number): number => Math.round(size * value * 100) / 100;
 
 /**
  * Emoji would need a remote asset fetch at render time (disabled), so drop
@@ -55,9 +46,77 @@ const serialLabel = (serial: number): string => `#${String(serial).padStart(4, "
  */
 export const cardText = (text: string): string =>
   text
-    .replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}\u200D\uFE0E\uFE0F\u20E3]/gu, "")
+    .replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}‍︎️⃣]/gu, "")
     .replace(/\s+/g, " ")
     .trim();
+
+function Face({ size }: { size: number }) {
+  return <img src={JEV_FACE_DATA_URI} width={size} height={size} style={{ width: size, height: size }} />;
+}
+
+function Crown({ medal, width }: { medal: Medal; width: number }) {
+  const height = Math.round((width * 24) / 34);
+  return (
+    <svg width={width} height={height} viewBox="0 0 26 18">
+      <path
+        d="M2 16 L4 4 L9 10 L13 2 L17 10 L22 4 L24 16 Z"
+        fill={MEDAL[medal].crown}
+        stroke={INK}
+        strokeWidth={2}
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** Jev's face + the lowercase "jevboard" wordmark. */
+function Brand() {
+  return (
+    <div style={row({ gap: 12 })}>
+      <Face size={52} />
+      <div style={{ display: "flex", fontFamily: OG_FONT.display, fontWeight: 700, fontSize: 36, lineHeight: 1, letterSpacing: em(36, -0.02) }}>
+        jevboard
+      </div>
+    </div>
+  );
+}
+
+/** Rounded pill, medal-tinted with a crown for the top three. */
+function Pill({ medal, children }: { medal: Medal | null; children: string }) {
+  const tint = medal ? MEDAL[medal] : { bg: PILL, line: LINE };
+  return (
+    <div
+      style={row({
+        gap: 10,
+        padding: medal ? "8px 20px 8px 16px" : "8px 20px",
+        borderRadius: 999,
+        border: `2.5px solid ${tint.line}`,
+        backgroundColor: tint.bg,
+        fontWeight: 700,
+        fontSize: 26,
+        lineHeight: 1.2,
+        color: INK,
+      })}
+    >
+      {medal ? <Crown medal={medal} width={34} /> : null}
+      <span>{children}</span>
+    </div>
+  );
+}
+
+function Footer({ children }: { children: string }) {
+  return (
+    <div style={{ display: "flex", marginTop: 34, paddingTop: 22, borderTop: `1.5px solid ${LINE}`, fontSize: 22, fontWeight: 500, color: SOFT }}>
+      {children}
+    </div>
+  );
+}
+
+const TAGLINE = "Think you're #1? Prove it for $5.";
+
+/** Rough Bricolage Grotesque 800 advance widths in em (tight tracking included). */
+const DISPLAY_EM = 0.56;
+const DIGIT_EM = 0.56;
 
 // ---------------------------------------------------------------------------
 // Verdict card: /og/<siteKey>.png
@@ -65,154 +124,110 @@ export const cardText = (text: string): string =>
 
 export interface EntryCardProps {
   readonly siteKey: string;
+  /** The business or product name, as it presents itself. */
+  readonly name: string;
   readonly score: number;
   readonly rank: number;
-  readonly total: number;
   /** What the business does, in Jev's words. */
   readonly tldr: string;
-  /** Global judgment serial ("Judgment #0042"). */
-  readonly serial: number;
-  /** 1 for a first judgment, 2+ for retrials. */
-  readonly roll: number;
-  /** Public host for the footer, e.g. "jevboard.com". */
-  readonly host: string;
 }
 
-const LEFT_COLUMN = 680;
+const NAME_MAX = 72;
+const NAME_MIN = 40;
+const SCORE_SIZE = 168;
+const GAP = 40;
+
+/**
+ * Largest name size (≤ 72px) whose text fits in two lines of `width`. Words
+ * are wrapped greedily with an average glyph width, which is close enough for
+ * a display face; `lineClamp` catches whatever the estimate misses.
+ */
+const fitName = (name: string, width: number): number => {
+  const words = name.split(" ").map((word) => [...word].length);
+  for (let size = NAME_MAX; size > NAME_MIN; size -= 4) {
+    const perLine = Math.max(1, Math.floor(width / (size * DISPLAY_EM)));
+    let lines = 1;
+    let used = 0;
+    for (const length of words) {
+      if (used > 0 && used + 1 + length <= perLine) {
+        used += 1 + length;
+        continue;
+      }
+      if (used > 0) lines++;
+      // An over-long word (a bare domain) breaks across lines.
+      const extra = Math.ceil(length / perLine) - 1;
+      lines += extra;
+      used = length - extra * perLine;
+    }
+    if (lines <= 2) return size;
+  }
+  return NAME_MIN;
+};
 
 export function EntryCard(props: EntryCardProps) {
-  const tier = tierFor(props.score);
-  const siteKey = truncate(cardText(props.siteKey), 60);
-  // Short keys get one huge line; long ones (github.com/org, producthunt paths) may wrap to two.
-  const oneLine = fitFont(siteKey, LEFT_COLUMN, 0.58, 20, 88);
-  const siteSize = oneLine >= 56 ? oneLine : Math.min(56, fitFont(siteKey, LEFT_COLUMN * 2, 0.58, 30, 88));
-  const siteWraps = [...siteKey].length * 0.58 * siteSize > LEFT_COLUMN;
-  const tldr = truncate(cardText(props.tldr), 220);
-  const scoreSize = props.score >= 1000 ? 178 : 220;
+  const medal = medalFor(props.rank);
+  const score = String(props.score);
+  const scoreWidth = [...score].length * SCORE_SIZE * DIGIT_EM;
+  const leftWidth = Math.min(780, CONTENT_WIDTH - GAP - scoreWidth);
+  const name = truncate(cardText(props.name) || cardText(props.siteKey), 64);
+  const nameSize = fitName(name, leftWidth);
+  const tldr = truncate(cardText(props.tldr), 200);
 
   return (
-    <div style={col({ width: OG_WIDTH, height: OG_HEIGHT, backgroundColor: PAPER, color: INK, fontFamily: OG_FONT.sans })}>
-      {/* Masthead */}
-      <div style={row({ height: 104, padding: "0 44px", backgroundColor: JEV, borderBottom: `6px solid ${INK}` })}>
-        <Face size={70} />
-        <div style={{ display: "flex", marginLeft: 14 }}>
-          <Wordmark size={60} />
-        </div>
-        <div style={row({ marginLeft: "auto", gap: 18 })}>
-          <div style={{ display: "flex", fontFamily: OG_FONT.mono, fontWeight: 700, fontSize: 22 }}>
-            {`JUDGMENT ${serialLabel(props.serial)}`}
-          </div>
-          <div
-            style={{
-              display: "flex",
-              padding: "8px 18px 6px",
-              backgroundColor: INK,
-              color: JEV,
-              fontFamily: OG_FONT.display,
-              fontSize: 32,
-              transform: "rotate(-3deg)",
-            }}
-          >
-            OFFICIAL VERDICT
-          </div>
-        </div>
+    <div
+      style={col({
+        width: OG_WIDTH,
+        height: OG_HEIGHT,
+        padding: `${PAD_Y}px ${PAD_X}px`,
+        backgroundColor: PAPER,
+        color: INK,
+        fontFamily: OG_FONT.sans,
+      })}
+    >
+      <div style={row({ justifyContent: "space-between" })}>
+        <Brand />
+        <Pill medal={medal}>{`#${formatCount(props.rank)} on the board`}</Pill>
       </div>
 
-      {/* Body */}
-      <div style={{ display: "flex", flex: 1, padding: "30px 44px 0", gap: 40 }}>
-        <div style={col({ width: LEFT_COLUMN, overflow: "hidden" })}>
-          <div style={{ display: "flex", fontFamily: OG_FONT.mono, fontWeight: 700, fontSize: 20, color: INK_SOFT, letterSpacing: 2 }}>
-            {props.roll > 1 ? `THE DEFENDANT · RETRIAL #${props.roll - 1}` : "THE DEFENDANT"}
-          </div>
-          <div
-            style={{
-              display: "flex",
-              marginTop: 4,
-              fontWeight: 700,
-              fontSize: siteSize,
-              lineHeight: 1.05,
-              letterSpacing: -2,
-              wordBreak: "break-word",
-            }}
-          >
-            {siteKey}
-          </div>
-          <div style={row({ marginTop: 16, gap: 12 })}>
-            <div
-              style={{
-                display: "flex",
-                padding: "4px 12px",
-                backgroundColor: tier.color,
-                color: tier.ink,
-                border: `3px solid ${INK}`,
-                fontWeight: 700,
-                fontSize: 22,
-                letterSpacing: 1,
-              }}
-            >
-              {tier.label.toUpperCase()}
-            </div>
-          </div>
+      <div style={{ display: "flex", marginTop: "auto", alignItems: "flex-end", justifyContent: "space-between", gap: GAP }}>
+        <div style={col({ width: leftWidth, flexShrink: 1 })}>
           <div
             style={{
               display: "block",
-              marginTop: 22,
-              fontWeight: 500,
-              fontSize: 28,
-              lineHeight: 1.3,
-              lineClamp: siteWraps ? 3 : 4,
+              fontFamily: OG_FONT.display,
+              fontWeight: 800,
+              fontSize: nameSize,
+              lineHeight: 1,
+              letterSpacing: em(nameSize, -0.035),
+              wordBreak: "break-word",
+              lineClamp: 2,
             }}
           >
-            {tldr}
+            {name}
           </div>
-        </div>
-
-        <div style={col({ flex: 1, alignItems: "stretch" })}>
-          <div
-            style={col({
-              alignItems: "center",
-              justifyContent: "center",
-              height: 300,
-              backgroundColor: tier.color,
-              color: tier.ink,
-              border: `6px solid ${INK}`,
-              boxShadow: `12px 12px 0 ${INK}`,
-            })}
-          >
-            <div style={{ display: "flex", fontFamily: OG_FONT.display, fontSize: scoreSize, lineHeight: 1, marginTop: -8 }}>
-              {String(props.score)}
+          {tldr ? (
+            <div style={{ display: "block", marginTop: 18, fontSize: 26, fontWeight: 500, lineHeight: 1.4, color: SOFT, lineClamp: 3 }}>
+              {tldr}
             </div>
-            <div style={{ display: "flex", fontFamily: OG_FONT.mono, fontWeight: 700, fontSize: 30, marginTop: 2 }}>/ 1000</div>
-          </div>
-          <div
-            style={row({
-              justifyContent: "center",
-              marginTop: 26,
-              padding: "6px 0 4px",
-              backgroundColor: INK,
-              color: PAPER,
-              fontFamily: OG_FONT.display,
-              fontSize: 52,
-              lineHeight: 1.1,
-              transform: "rotate(1.5deg)",
-            })}
-          >
-            <span>{`#${formatCount(props.rank)}`}</span>
-            <span style={{ color: JEV, marginLeft: 14 }}>{`OF ${formatCount(props.total)}`}</span>
-          </div>
+          ) : null}
+        </div>
+        <div
+          style={{
+            display: "flex",
+            flexShrink: 0,
+            fontFamily: OG_FONT.display,
+            fontWeight: 800,
+            fontSize: SCORE_SIZE,
+            lineHeight: 0.8,
+            letterSpacing: em(SCORE_SIZE, -0.04),
+            color: ACCENT,
+          }}
+        >
+          {score}
         </div>
       </div>
 
-      {/* Footer */}
-      <div style={row({ height: 74, padding: "0 44px", backgroundColor: INK, color: PAPER, justifyContent: "space-between" })}>
-        <div style={row({ fontFamily: OG_FONT.display, fontSize: 34, lineHeight: 1 })}>
-          <span>DEMAND A RETRIAL AT</span>
-          <span style={{ color: JEV, marginLeft: 12 }}>{props.host.toUpperCase()}</span>
-        </div>
-        <div style={{ display: "flex", fontFamily: OG_FONT.mono, fontWeight: 700, fontSize: 20, color: MUTED_ON_INK }}>
-          YOU CAN'T BUY #1
-        </div>
-      </div>
+      <Footer>{TAGLINE}</Footer>
     </div>
   );
 }
@@ -222,125 +237,58 @@ export function EntryCard(props: EntryCardProps) {
 // ---------------------------------------------------------------------------
 
 export interface DefaultCardProps {
-  readonly entries: number;
-  readonly judgments: number;
-  readonly revenueCents: number;
-  readonly king: { readonly siteKey: string; readonly score: number } | null;
-  readonly host: string;
+  /** The current #1, if the board has one. */
+  readonly king: { readonly siteKey: string } | null;
 }
 
-function Stat({ value, label, last = false }: { value: string; label: string; last?: boolean }) {
+const HEADLINE_SIZE = 96;
+
+function Headline({ children, color }: { children: string; color: string }) {
   return (
     <div
-      style={col({
-        justifyContent: "center",
-        padding: "0 28px",
-        borderRight: last ? "none" : `3px solid #3a382f`,
-      })}
+      style={{
+        display: "flex",
+        fontFamily: OG_FONT.display,
+        fontWeight: 800,
+        fontSize: HEADLINE_SIZE,
+        lineHeight: 1.02,
+        letterSpacing: em(HEADLINE_SIZE, -0.035),
+        color,
+      }}
     >
-      <div style={{ display: "flex", fontFamily: OG_FONT.display, fontSize: 50, lineHeight: 1, color: JEV }}>{value}</div>
-      <div style={{ display: "flex", marginTop: 6, fontFamily: OG_FONT.mono, fontWeight: 700, fontSize: 17, color: MUTED_ON_INK, letterSpacing: 1 }}>
-        {label}
-      </div>
+      {children}
     </div>
   );
 }
 
-function Headline({ children, color = INK }: { children: ReactNode; color?: string }) {
-  return (
-    <div style={{ display: "flex", fontFamily: OG_FONT.display, fontSize: 128, lineHeight: 0.98, color, letterSpacing: -1 }}>{children}</div>
-  );
-}
-
 export function DefaultCard(props: DefaultCardProps) {
-  const king = props.king ? truncate(props.king.siteKey, 26) : null;
+  const king = props.king ? truncate(cardText(props.king.siteKey), 40) : "";
   return (
-    <div style={col({ width: OG_WIDTH, height: OG_HEIGHT, backgroundColor: JEV, color: INK, fontFamily: OG_FONT.sans })}>
-      <div
-        style={{
-          display: "flex",
-          flex: 1,
-          padding: "44px 56px 0",
-          // Tabloid halftone. Satori only honours percentage colour stops here.
-          backgroundImage: "radial-gradient(circle, #e6bf00 16%, transparent 21%)",
-          backgroundSize: "18px 18px",
-        }}
-      >
-        <div style={col({ flex: 1 })}>
-          <div style={row({ gap: 16 })}>
-            <div style={{ display: "flex", padding: "6px 14px 4px", backgroundColor: INK }}>
-              <div style={row({ fontFamily: OG_FONT.display, fontSize: 34, lineHeight: 1, color: PAPER })}>
-                <span>JEV</span>
-                <span style={{ color: HOT }}>BOARD</span>
-              </div>
-            </div>
-            <div style={{ display: "flex", fontFamily: OG_FONT.mono, fontWeight: 700, fontSize: 20, letterSpacing: 1 }}>
-              THE INTERNET'S MOST HONEST BILLBOARD
-            </div>
-          </div>
-          <div style={col({ marginTop: 22 })}>
-            <Headline>PAY $5.</Headline>
-            <Headline>GET JUDGED</Headline>
-            <div style={row({ gap: 26 })}>
-              <Headline>BY</Headline>
-              <div
-                style={{
-                  display: "flex",
-                  padding: "0 18px",
-                  backgroundColor: INK,
-                  transform: "rotate(-2deg)",
-                }}
-              >
-                <Headline color={JEV}>JEV.</Headline>
-              </div>
-            </div>
-          </div>
-          <div style={{ display: "flex", marginTop: 18, fontWeight: 700, fontSize: 30 }}>
-            You can't buy #1. You can only buy Jev's attention.
+    <div
+      style={col({
+        width: OG_WIDTH,
+        height: OG_HEIGHT,
+        padding: `${PAD_Y}px ${PAD_X}px`,
+        backgroundColor: PAPER,
+        color: INK,
+        fontFamily: OG_FONT.sans,
+      })}
+    >
+      <Brand />
+
+      <div style={row({ flex: 1, justifyContent: "space-between", gap: GAP })}>
+        <div style={col({ width: 760 })}>
+          <Headline color={INK}>Think you're #1?</Headline>
+          <Headline color={ACCENT}>Prove it for $5.</Headline>
+          <div style={{ display: "flex", marginTop: 24, fontSize: 28, fontWeight: 500, lineHeight: 1.4, color: SOFT }}>
+            No bidding, no ads, no buying your way up. Jev reads your site and ranks how useful your business really is.
           </div>
         </div>
-        <div style={col({ width: 330, alignItems: "center", justifyContent: "center", marginTop: -10 })}>
-          <Face size={320} rotate={-8} />
-          <div
-            style={{
-              display: "flex",
-              marginTop: -6,
-              padding: "8px 16px",
-              backgroundColor: CARD,
-              border: `4px solid ${INK}`,
-              boxShadow: `6px 6px 0 ${INK}`,
-              fontFamily: OG_FONT.mono,
-              fontWeight: 700,
-              fontSize: 22,
-              transform: "rotate(3deg)",
-            }}
-          >
-            {`1–1000 · NO DRAWS`}
-          </div>
-        </div>
+        <Face size={240} />
       </div>
 
-      <div style={row({ height: 128, backgroundColor: INK, color: PAPER, borderTop: `6px solid ${INK}`, padding: "0 28px" })}>
-        <Stat value={formatCount(props.entries)} label="DEFENDANTS" />
-        <Stat value={formatCount(props.judgments)} label="JUDGMENTS" />
-        <Stat value={formatMoney(props.revenueCents)} label="FED TO JEV" />
-        <div style={col({ flex: 1, justifyContent: "center", padding: "0 28px" })}>
-          {king && props.king ? (
-            <div style={col({})}>
-              <div style={row({ fontFamily: OG_FONT.display, fontSize: 40, lineHeight: 1, color: PAPER })}>
-                <span style={{ color: JEV, marginRight: 12 }}>#1</span>
-                <span>{king.toUpperCase()}</span>
-              </div>
-              <div style={{ display: "flex", marginTop: 8, fontFamily: OG_FONT.mono, fontWeight: 700, fontSize: 17, color: MUTED_ON_INK, letterSpacing: 1 }}>
-                {`CURRENT KING · ${props.king.score}/1000`}
-              </div>
-            </div>
-          ) : (
-            <div style={{ display: "flex", fontFamily: OG_FONT.display, fontSize: 36, lineHeight: 1.05, color: PAPER }}>
-              THE DOCKET IS EMPTY. BE THE FIRST DEFENDANT.
-            </div>
-          )}
-        </div>
+      <div style={{ display: "flex" }}>
+        {king ? <Pill medal="gold">{`#1 right now: ${king}`}</Pill> : <Pill medal={null}>The board is empty. Be the first.</Pill>}
       </div>
     </div>
   );

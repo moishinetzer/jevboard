@@ -1,23 +1,45 @@
 import { Link } from "react-router";
-import { focusJudgeInput, focusRing } from "./board/shared";
+import { formatCount } from "~/lib/format";
 import { JevFace, Wordmark } from "./logo";
-import { ThemeToggle } from "./theme-toggle";
 
-export function SiteHeader() {
+/** Below this many views in a week, the "Live" pill stays hidden rather than look lonely. */
+const LIVE_PILL_MIN_VIEWS = 25;
+
+/** The board's header: the logo, centred, and a quiet "Live" pill once people are looking. */
+export function HomeHeader({ weekViews }: { weekViews: number }) {
   return (
-    <header className="sticky top-0 z-40 border-b-[3px] border-line bg-paper/95 backdrop-blur">
-      <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-2.5">
-        <Link to="/" className={`flex shrink-0 items-center gap-2 ${focusRing}`} aria-label="Jevboard home">
-          <JevFace size={36} />
-          <Wordmark className="text-3xl" />
-        </Link>
-        <div className="ml-auto flex items-center gap-3">
-          <ThemeToggle />
-          <Link to="/#add" onClick={focusJudgeInput} className={`btn px-4 py-2 text-sm ${focusRing}`}>
-            Add your business
-          </Link>
-        </div>
-      </div>
+    <header className="flex flex-col items-center gap-3 px-4 pt-7 sm:gap-3.5 sm:pt-10">
+      <Link to="/" aria-label="Jevboard home" className="flex items-center gap-2 text-ink">
+        <JevFace size={34} label="" className="size-7 sm:size-[34px]" />
+        <Wordmark className="text-[25px] sm:text-[30px]" />
+      </Link>
+      {weekViews >= LIVE_PILL_MIN_VIEWS ? (
+        <p className="flex items-center gap-2 rounded-full bg-pill py-1 pr-3 pl-1.5 text-xs text-soft sm:text-[13px]">
+          <span className="rounded-full bg-jev px-2 py-0.5 text-[10px] font-bold text-on-jev sm:text-[11px]">Live</span>
+          <span>{formatCount(weekViews)} views this week</span>
+          <span aria-hidden className="hidden sm:inline">
+            ·
+          </span>
+          <a href="#board" className="link hidden sm:inline">
+            See the board
+          </a>
+        </p>
+      ) : null}
+    </header>
+  );
+}
+
+/** Every other page: the logo on the left, the way back on the right. */
+export function PageHeader() {
+  return (
+    <header className="mx-auto flex w-full max-w-[780px] items-center justify-between gap-4 px-4 pt-7 sm:pt-9">
+      <Link to="/" aria-label="Jevboard home" className="flex items-center gap-2 text-ink">
+        <JevFace size={30} label="" />
+        <Wordmark className="text-[22px] sm:text-[26px]" />
+      </Link>
+      <Link to="/" className="link text-sm">
+        <span aria-hidden>← </span>Back to the board
+      </Link>
     </header>
   );
 }
@@ -29,28 +51,22 @@ export function ModeBanner({ mode }: { mode: { payments: "autumn" | "fake"; judg
     mode.judge === "mock" ? "Jev is a deterministic mock (no OPENROUTER_API_KEY)" : null,
   ].filter(Boolean);
   return (
-    <div className="border-b-2 border-dashed border-line bg-jev px-4 py-1.5 text-center text-xs font-bold uppercase tracking-wide text-[#111110]">
-      🧪 Dev mode: {parts.join(" · ")}
-    </div>
+    <div className="bg-jev px-4 py-1.5 text-center text-xs font-semibold text-on-jev">Dev mode: {parts.join(" · ")}</div>
   );
 }
 
 export function SiteFooter() {
   return (
-    <footer className="mt-20 border-t-[3px] border-line">
-      <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-4 py-8 text-sm text-ink-soft">
-        <p className="max-w-xl">
-          Jev is an AI. Scores are opinions, not advice. Each $5 buys one evaluation of a website, not a rank.
-        </p>
-        <nav className="flex gap-4 font-bold text-ink" aria-label="Footer">
-          <Link to="/faq" className={`hover:underline ${focusRing}`}>
-            FAQ
-          </Link>
-          <Link to="/terms" className={`hover:underline ${focusRing}`}>
-            Terms
-          </Link>
-        </nav>
-      </div>
+    <footer className="mt-auto flex flex-wrap justify-center gap-2 px-4 pt-10 pb-8 text-xs text-soft sm:text-[13px]">
+      <span>Jev is an AI. Verdicts are opinions.</span>
+      <span aria-hidden>·</span>
+      <Link to="/faq" className="link font-normal">
+        FAQ
+      </Link>
+      <span aria-hidden>·</span>
+      <Link to="/terms" className="link font-normal">
+        Terms
+      </Link>
     </footer>
   );
 }

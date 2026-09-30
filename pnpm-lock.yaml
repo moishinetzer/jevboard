@@ -14,13 +14,10 @@ importers:
       '@effect/sql-d1':
         specifier: 4.0.0-rc.118
         version: 4.0.0-rc.118(effect@4.0.0-rc.118)
-      '@fontsource/anton':
+      '@fontsource/bricolage-grotesque':
         specifier: ^5.3.0
         version: 5.3.0
-      '@fontsource/jetbrains-mono':
-        specifier: ^5.3.0
-        version: 5.3.0
-      '@fontsource/space-grotesk':
+      '@fontsource/instrument-sans':
         specifier: ^5.3.0
         version: 5.3.0
       effect:
@@ -622,14 +619,11 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@fontsource/anton@5.3.0':
-    resolution: {integrity: sha512-OR1D5n124n2XRs66SbX7IjcOSptljEJE8FcDNnlni2y1/M6KpTx7cU2PIWzTSsBj4WFkHPw24On8qw3qkQZuTw==}
+  '@fontsource/bricolage-grotesque@5.3.0':
+    resolution: {integrity: sha512-MdOVb/5in11IfN/IQJOExMuu6AroCIQbirl0yX7NUvKk+h0HYIKfGaVAXRS/gCPil4aFxWhjZnOw28tUwv7tFw==}
 
-  '@fontsource/jetbrains-mono@5.3.0':
-    resolution: {integrity: sha512-fqDfB5I9f1p1TV486aUgB9t8zP84P0O1FtQR5Ol9vjwPy+S+EIGlVYm1cvj2W5shcZMTg2nZFdVMoH5wFu8a1A==}
-
-  '@fontsource/space-grotesk@5.3.0':
-    resolution: {integrity: sha512-ksnGizDPXIDuvqcTYTSrmZ+evx9sDlS8rp7+42BQ7wU+spt3twEoXfbJz672C+5CLg6VeUQwRy5RXshWb67LcQ==}
+  '@fontsource/instrument-sans@5.3.0':
+    resolution: {integrity: sha512-QwXc4hb/px3XvSPS2CPAOgey8nyrQFxgxrmXQQ+pN+P51hKdAcchxpg8rSbjANFfPu6VKXhDqkVDucXMZ9CM5g==}
 
   '@hedgedoc/html-to-react@2.1.1':
     resolution: {integrity: sha512-jZQYG8XWi7CmhUo5F3YcnDjwlTIaY3PwuCSRgcP01CXEVHz8+dYKtHwaP7Fpu9qMRMoMQSWLgHXIKaGgbch/bA==}
@@ -2583,11 +2577,9 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@fontsource/anton@5.3.0': {}
+  '@fontsource/bricolage-grotesque@5.3.0': {}
 
-  '@fontsource/jetbrains-mono@5.3.0': {}
-
-  '@fontsource/space-grotesk@5.3.0': {}
+  '@fontsource/instrument-sans@5.3.0': {}
 
   '@hedgedoc/html-to-react@2.1.1(react@19.3.0)':
     dependencies:

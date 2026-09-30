@@ -36,6 +36,12 @@ export const loadBoard = Effect.fn("loadBoard")(function* (openSiteKey: string |
 
   const listing = yield* board.page({ page, pageSize: PAGE_SIZE, sort: "rank" });
   const boardViews = yield* views.daily(BOARD_VIEWS, VIEW_DAYS);
+  const rowViews = Object.fromEntries(
+    yield* views.totals(
+      listing.entries.map((entry) => entry.siteKey),
+      VIEW_DAYS,
+    ),
+  );
 
   const details = open
     ? {
@@ -61,6 +67,8 @@ export const loadBoard = Effect.fn("loadBoard")(function* (openSiteKey: string |
   return {
     listing,
     boardViews,
+    /** Views of each listed business over the last VIEW_DAYS days, by site key. */
+    rowViews,
     open: open && details ? { entry: open, ...details } : null,
     judging,
     checkoutCancelled: cancelledOrder !== null,

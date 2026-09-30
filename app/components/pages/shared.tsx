@@ -1,8 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import { Link } from "react-router";
-import { Favicon } from "~/components/ui";
 import { formatDuration } from "~/lib/format";
-import { entryPath } from "~/lib/site-key";
 
 /** Keyboard focus ring for links and buttons on the content pages. */
 export const focusRing = "outline-none focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-hot";
@@ -138,19 +135,6 @@ export function Exhibit({
 export function EmptyNote({ children }: { children: ReactNode }) {
   return (
     <p className="border-2 border-dashed border-line px-4 py-6 text-center font-mono text-sm text-ink-soft">{children}</p>
-  );
-}
-
-/** Favicon + site key, linking to the verdict page. */
-export function SiteLink({ siteKey, size = 24, className }: { siteKey: string; size?: number; className?: string }) {
-  return (
-    <Link
-      to={entryPath(siteKey)}
-      className={`group inline-flex min-w-0 items-center gap-2 font-bold ${focusRing} ${className ?? ""}`}
-    >
-      <Favicon host={siteKey.split("/")[0]!} size={size} />
-      <span className="truncate group-hover:underline">{siteKey}</span>
-    </Link>
   );
 }
 

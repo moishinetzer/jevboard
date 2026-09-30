@@ -8,7 +8,6 @@ import {
   type BoardEvent,
   type BoardStats,
   type ContentFlag,
-  type Duel,
   type DuelContender,
   type EventKind,
   IN_FLIGHT_STATUSES,
@@ -266,7 +265,6 @@ export class Board extends Context.Service<
     readonly commitPlacement: (input: CommitPlacementInput) => Effect.Effect<PlacementResult>;
     readonly judgments: (entryId: EntryId) => Effect.Effect<ReadonlyArray<Judgment>>;
     readonly judgment: (id: string) => Effect.Effect<Option.Option<Judgment>>;
-    readonly duelsForJudgment: (judgmentId: string) => Effect.Effect<ReadonlyArray<Duel>>;
     readonly events: (options: { readonly afterId?: number | undefined; readonly limit: number }) => Effect.Effect<ReadonlyArray<BoardEvent>>;
     readonly stats: Effect.Effect<BoardStats>;
     /** Counts an outbound visit and returns the URL to redirect to. */
@@ -696,36 +694,6 @@ export class Board extends Context.Service<
         return Option.map(Option.fromNullishOr(rows[0]), toJudgment);
       }, Effect.orDie);
 
-      interface DuelRow {
-        readonly id: string;
-        readonly judgmentId: string;
-        readonly challengerId: string;
-        readonly challengerSiteKey: string;
-        readonly opponentId: string;
-        readonly opponentSiteKey: string;
-        readonly winnerId: string;
-        readonly reason: string;
-        readonly score: number;
-        readonly createdAt: number;
-      }
-      const toDuel = (row: DuelRow): Duel => ({
-        ...row,
-        judgmentId: row.judgmentId as JudgmentId,
-        challengerId: row.challengerId as EntryId,
-        opponentId: row.opponentId as EntryId,
-        winnerId: row.winnerId as EntryId,
-      });
-      const duelSelect = sql`
-        SELECT d.*, c.site_key AS challenger_site_key, o.site_key AS opponent_site_key
-        FROM duels d
-        JOIN entries c ON c.id = d.challenger_id
-        JOIN entries o ON o.id = d.opponent_id`;
-
-      const duelsForJudgment = Effect.fn("Board.duelsForJudgment")(function* (judgmentId: string) {
-        const rows = yield* sql<DuelRow>`${duelSelect} WHERE d.judgment_id = ${judgmentId} ORDER BY d.seq ASC`;
-        return rows.map(toDuel);
-      }, Effect.orDie);
-
       const events = Effect.fn("Board.events")(function* (options: {
         readonly afterId?: number | undefined;
         readonly limit: number;
@@ -805,7 +773,6 @@ export class Board extends Context.Service<
         commitPlacement,
         judgments,
         judgment,
-        duelsForJudgment,
         events,
         stats,
       });

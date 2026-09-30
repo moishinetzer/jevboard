@@ -68,7 +68,7 @@ const crawlFailureMessage = (error: CrawlError): string => {
 const judgeFailureMessage = (error: JudgeError): string =>
   error.reason === "refused"
     ? "Jev declined to judge this one."
-    : "Jev's brain short-circuited while judging. Retry for free — you already paid.";
+    : "Jev's brain short-circuited while judging. You already paid, so retrying is free.";
 
 /** Outcome of the judging stage. */
 export type JudgeStageResult = "judged" | "skipped" | "failed";
@@ -129,7 +129,7 @@ export class Pipeline extends Context.Service<
         yield* orders.setStage(
           orderId,
           "tiebreaking",
-          `${verdict.score} = ${verdict.score}. Jev doesn't do draws. ${group.length} rival${group.length === 1 ? "" : "s"} share this score — entering the Duel Pit…`,
+          "Finding its exact spot on the board…",
         );
 
         const deadline = Date.now() + TIEBREAK_BUDGET_MS;
@@ -149,7 +149,7 @@ export class Pipeline extends Context.Service<
           }
           yield* orders.setDetail(
             orderId,
-            `⚔️ Duel ${duels.length + 1} of ~${expected}: ${siteKey} vs ${opponent.siteKey} (both ${verdict.score})`,
+            `Comparing it with the neighbours (${duels.length + 1} of ~${expected})…`,
           );
           // Shuffle sides so position bias can't favour either party.
           const challengerIsA = yield* Random.nextBoolean;
@@ -240,7 +240,7 @@ export class Pipeline extends Context.Service<
           yield* orders.setStage(
             orderId,
             "tiebreaking",
-            `Jev scored it ${result.verdict.score}/1000. Finding its place on the board…`,
+            "Jev has a verdict. Finding its place on the board…",
             token,
           );
           return "judged" as const;
@@ -324,7 +324,7 @@ export class Pipeline extends Context.Service<
 
       /** Marks a paid order failed after its job exhausted every retry. */
       const giveUp = (orderId: OrderId) =>
-        orders.fail(orderId, "Something broke inside Jev. Retry for free — you already paid.");
+        orders.fail(orderId, "Something broke inside Jev. You already paid, so retrying is free.");
 
       return Pipeline.of({
         judge: judgeJob,

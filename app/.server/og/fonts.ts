@@ -3,9 +3,8 @@ import { EMBEDDED_FONTS } from "./fonts.generated";
 
 /** Font families registered with satori; use these names in card styles. */
 export const OG_FONT = {
-  display: "Anton",
-  sans: "Space Grotesk",
-  mono: "JetBrains Mono",
+  display: "Bricolage Grotesque",
+  sans: "Instrument Sans",
 } as const;
 
 const decodeBase64 = (base64: string): ArrayBuffer => {

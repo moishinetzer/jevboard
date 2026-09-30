@@ -50,44 +50,42 @@ export const action = effectAction("dev-checkout", ({ params, request }: Route.A
   }),
 );
 
-export const meta: Route.MetaFunction = () => [{ title: "Simulated checkout — Jevboard" }, { name: "robots", content: "noindex" }];
+export const meta: Route.MetaFunction = () => [{ title: "Simulated checkout | Jevboard" }, { name: "robots", content: "noindex" }];
 
 export default function DevCheckout({ loaderData }: Route.ComponentProps) {
   const navigation = useNavigation();
   const { order } = loaderData;
   return (
-    <main className="mx-auto max-w-lg px-4 py-16">
-      <div className="slab p-8">
+    <main className="mx-auto w-full max-w-lg px-4 py-16">
+      <div className="panel p-6 sm:p-8">
         <div className="flex items-center justify-between">
-          <span className="sticker">Simulated checkout</span>
+          <span className="tag">Simulated checkout</span>
           <JevFace size={44} />
         </div>
-        <h1 className="mt-6 font-display text-4xl uppercase">
-          {order.kind === "reroll" ? "Rejudge" : "Add my business"}
-        </h1>
-        <p className="mt-1 font-mono text-lg">{order.siteKey}</p>
-        <div className="mt-6 flex items-baseline justify-between border-t-2 border-dashed border-line pt-4">
-          <span className="font-bold uppercase">Total</span>
-          <span className="score-num text-5xl">{formatMoney(order.amountCents)}</span>
+        <h1 className="headline mt-6 text-4xl">{order.kind === "reroll" ? "Rejudge" : "Add my business"}</h1>
+        <p className="mt-1 text-lg text-soft">{order.siteKey}</p>
+        <div className="mt-6 flex items-baseline justify-between border-t border-line pt-4">
+          <span className="font-semibold">Total</span>
+          <span className="font-display text-4xl font-bold">{formatMoney(order.amountCents)}</span>
         </div>
-        <p className="mt-4 text-sm text-ink-soft">
-          No AUTUMN_SECRET_KEY is configured, so this page stands in for Stripe. No card, no money — pressing the button
+        <p className="mt-4 text-sm text-soft">
+          No AUTUMN_SECRET_KEY is configured, so this page stands in for Stripe. No card, no money: pressing the button
           marks the order as paid.
         </p>
         {order.status === "pending_payment" ? (
           <>
             <Form method="post" className="mt-6">
-              <button type="submit" className="btn w-full px-6 py-4 text-lg" disabled={navigation.state !== "idle"}>
+              <button type="submit" className="btn h-14 w-full text-lg" disabled={navigation.state !== "idle"}>
                 {navigation.state !== "idle" ? "Paying…" : `Pay ${formatMoney(order.amountCents)} (pretend)`}
               </button>
             </Form>
-            <a href={`/?cancelled=${order.id}`} className="mt-4 block text-center text-sm font-bold underline">
+            <a href={`/?cancelled=${order.id}`} className="link mt-4 block text-center text-sm">
               Cancel and go back
             </a>
           </>
         ) : (
-          <a href={loaderData.returnTo} className="btn mt-6 w-full px-6 py-4 text-lg">
-            Already paid — see the verdict
+          <a href={loaderData.returnTo} className="btn mt-6 h-14 w-full text-lg">
+            Already paid. See the verdict
           </a>
         )}
       </div>

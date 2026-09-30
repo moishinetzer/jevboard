@@ -26,7 +26,7 @@ const preflightMessage = (error: CrawlError): string => {
     case "blocked":
       return "Jev isn't allowed to visit that address.";
     case "timeout":
-      return "That site took too long to answer. Jev won't charge you to judge a ghost — try again later.";
+      return "That site took too long to answer. Jev won't charge you to judge a ghost. Try again later.";
     case "http":
       return `That site answered with an error (${error.message}). Fix it before Jev sees it.`;
     case "not-html":
@@ -95,7 +95,7 @@ export const submitSite = Effect.fn("submitSite")(function* (rawUrl: string) {
     return {
       ok: false,
       field: "payment",
-      message: "The payment desk is jammed. No money moved — please try again in a minute.",
+      message: "The payment desk is jammed. No money moved. Try again in a minute.",
       value: rawUrl,
     } satisfies SubmitFailure;
   }
