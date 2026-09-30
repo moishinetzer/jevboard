@@ -48,7 +48,7 @@ export function BoardPage({ data }: { data: BoardPageData }) {
           <p className="max-w-[620px] text-[15px] leading-[1.55] text-soft sm:text-lg">
             <b className="font-bold">No bidding, no ads, no buying your way up.</b>
             <br />
-            Jev, an AI judge, reads your site and ranks how useful your business really is.
+            Jev reads your site and ranks how useful your business really is.
           </p>
           <h1 className="headline mt-[22px] text-[40px] sm:mt-[30px] sm:text-6xl">
             Think you're #1?

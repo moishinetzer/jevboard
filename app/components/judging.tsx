@@ -309,7 +309,7 @@ export function Verdict({ order, result, origin }: { order: OrderView; result: R
         </figure>
         {judgment.manipulationAttempt ? (
           <p className="mt-3 rounded-xl border border-bad/40 px-3 py-2 text-sm font-semibold text-bad">
-            This site tried to give the AI judge instructions. Jev noticed and marked it down.
+            This site tried to give Jev instructions. Jev noticed and marked it down.
           </p>
         ) : null}
       </section>

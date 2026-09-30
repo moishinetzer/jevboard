@@ -33,7 +33,7 @@ export const meta: Route.MetaFunction = () => [
   {
     name: "description",
     content:
-      "No bidding, no ads, no buying your way up. Jev, an AI judge, reads your site and ranks how useful your business really is.",
+      "No bidding, no ads, no buying your way up. Jev reads your site and ranks how useful your business really is.",
   },
   { property: "og:site_name", content: "Ranked by Jev" },
   { property: "og:type", content: "website" },

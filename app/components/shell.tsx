@@ -58,7 +58,7 @@ export function ModeBanner({ mode }: { mode: { payments: "autumn" | "fake"; judg
 export function SiteFooter() {
   return (
     <footer className="mt-auto flex flex-wrap justify-center gap-2 px-4 pt-10 pb-8 text-xs text-soft sm:text-[13px]">
-      <span>Jev is an AI. Verdicts are opinions.</span>
+      <span>Verdicts are Jev's opinions.</span>
       <span aria-hidden>·</span>
       <Link to="/faq" className="link font-normal">
         FAQ

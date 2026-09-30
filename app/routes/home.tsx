@@ -12,7 +12,7 @@ export const shouldRevalidate: ShouldRevalidateFunction = ({ formAction, default
 
 const TITLE = "Ranked by Jev: think you're #1? Prove it for $5.";
 const DESCRIPTION =
-  "No bidding, no ads, no buying your way up. Jev, an AI judge, reads your site and ranks how useful your business really is.";
+  "No bidding, no ads, no buying your way up. Jev reads your site and ranks how useful your business really is.";
 
 export const meta: Route.MetaFunction = ({ loaderData }) => {
   const origin = loaderData?.origin ?? "";
