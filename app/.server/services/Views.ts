@@ -24,8 +24,14 @@ export class Views extends Context.Service<
     readonly record: (siteKeys: ReadonlyArray<string>) => Effect.Effect<void>;
     /** The last `days` days, oldest first, with zeros for days nobody looked. */
     readonly daily: (siteKey: string, days: number) => Effect.Effect<ReadonlyArray<ViewDay>>;
-    /** Total views over the last `days` days for each site key (missing keys had none). */
-    readonly totals: (siteKeys: ReadonlyArray<string>, days: number) => Effect.Effect<ReadonlyMap<string, number>>;
+    /**
+     * Views per day over the last `days` days (oldest first, zero-filled, the
+     * same days as `daily`) for each site key. Keys nobody viewed are left out.
+     */
+    readonly dailyMany: (
+      siteKeys: ReadonlyArray<string>,
+      days: number,
+    ) => Effect.Effect<ReadonlyMap<string, ReadonlyArray<number>>>;
   }
 >()("jevboard/Views") {
   static readonly layer = Layer.effect(
@@ -60,17 +66,26 @@ export class Views extends Context.Service<
         });
       }, Effect.orDie);
 
-      const totals = Effect.fn("Views.totals")(function* (siteKeys: ReadonlyArray<string>, days: number) {
-        if (siteKeys.length === 0) return new Map<string, number>();
-        const first = utcDay(Date.now() - (days - 1) * DAY_MS);
-        const rows = yield* sql<{ readonly siteKey: string; readonly views: number }>`
-          SELECT site_key, SUM(count) AS views FROM views
-          WHERE day >= ${first} AND site_key IN ${sql.in(siteKeys)}
-          GROUP BY site_key`;
-        return new Map(rows.map((row) => [row.siteKey, Number(row.views)]));
+      const dailyMany = Effect.fn("Views.dailyMany")(function* (siteKeys: ReadonlyArray<string>, days: number) {
+        if (siteKeys.length === 0) return new Map<string, ReadonlyArray<number>>();
+        const now = Date.now();
+        const labels = Array.from({ length: days }, (_, index) => utcDay(now - (days - 1 - index) * DAY_MS));
+        const slot = new Map(labels.map((day, index) => [day, index]));
+        const rows = yield* sql<{ readonly siteKey: string; readonly day: string; readonly count: number }>`
+          SELECT site_key, day, count FROM views
+          WHERE day >= ${labels[0]} AND site_key IN ${sql.in(siteKeys)}`;
+        const counts = new Map<string, Array<number>>();
+        for (const row of rows) {
+          const index = slot.get(row.day);
+          if (index === undefined) continue;
+          let series = counts.get(row.siteKey);
+          if (!series) counts.set(row.siteKey, (series = Array.from({ length: days }, () => 0)));
+          series[index] = Number(row.count);
+        }
+        return counts as ReadonlyMap<string, ReadonlyArray<number>>;
       }, Effect.orDie);
 
-      return Views.of({ record, daily, totals });
+      return Views.of({ record, daily, dailyMany });
     }),
   );
 }

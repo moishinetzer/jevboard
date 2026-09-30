@@ -186,6 +186,32 @@ body {
     line-height: 1.02;
     text-wrap: balance;
   }
+  /*
+   * A board row's details sliding open and shut: the grid row grows from 0fr
+   * to 1fr (its child needs min-height: 0 and overflow: hidden). Freshly
+   * mounted open details start from 0fr via @starting-style.
+   */
+  .expander {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition:
+      grid-template-rows 0.32s cubic-bezier(0.2, 0.8, 0.2, 1),
+      opacity 0.18s ease;
+  }
+  .expander[data-open="true"] {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transition:
+      grid-template-rows 0.32s cubic-bezier(0.2, 0.8, 0.2, 1),
+      opacity 0.26s ease 0.06s;
+  }
+  @starting-style {
+    .expander[data-open="true"] {
+      grid-template-rows: 0fr;
+      opacity: 0;
+    }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,33 +1,15 @@
+import { useEffect } from "react";
 import { Link } from "react-router";
-import type { BoardEntry, Judgment } from "~/.server/domain/models";
+import type { BoardData } from "~/.server/flows/board";
 import { JudgeForm } from "~/components/judge-form";
 import { HomeHeader } from "~/components/shell";
 import { formatCount } from "~/lib/format";
 import { BoardRow } from "./board-row";
+import { rememberBoard } from "./cache";
 import { boardHref, focusJudgeInput } from "./shared";
 
-type ViewDays = ReadonlyArray<{ readonly day: string; readonly views: number }>;
-
 /** What the one-page board needs (the loader data of `/` and `/s/<site>`). */
-export interface BoardPageData {
-  readonly listing: {
-    readonly entries: ReadonlyArray<BoardEntry>;
-    readonly total: number;
-    readonly page: number;
-    readonly pageSize: number;
-  };
-  readonly boardViews: ViewDays;
-  readonly rowViews: Readonly<Record<string, number>>;
-  readonly open: {
-    readonly entry: BoardEntry;
-    readonly judgment: Judgment | null;
-    readonly views: ViewDays;
-    readonly canRejudge: boolean;
-  } | null;
-  readonly judging: ReadonlyArray<{ readonly id: string; readonly siteKey: string }>;
-  readonly checkoutCancelled: boolean;
-  readonly cancelledSite: string | null;
-}
+export type BoardPageData = BoardData;
 
 /**
  * The whole site on one page: the pitch and the $5 form, then the board.
@@ -37,6 +19,9 @@ export function BoardPage({ data }: { data: BoardPageData }) {
   const { listing, open } = data;
   const closeHref = boardHref(listing.page);
   const weekViews = data.boardViews.slice(-7).reduce((sum, day) => sum + day.views, 0);
+  const days = data.boardViews.map((day) => day.day);
+
+  useEffect(() => rememberBoard(data), [data]);
 
   return (
     <>
@@ -70,8 +55,9 @@ export function BoardPage({ data }: { data: BoardPageData }) {
                 <BoardRow
                   key={entry.siteKey}
                   entry={entry}
-                  viewCount={data.rowViews[entry.siteKey] ?? 0}
-                  details={open && open.entry.siteKey === entry.siteKey ? open : null}
+                  details={data.rows[entry.siteKey] ?? null}
+                  days={days}
+                  open={open?.siteKey === entry.siteKey}
                   closeHref={closeHref}
                   first={index === 0}
                 />

@@ -25,20 +25,21 @@ describe("Views", () => {
       assert.strictEqual(board.at(-1)!.views, 1);
       assert.strictEqual((yield* views.daily("nobody.com", 7)).reduce((sum, day) => sum + day.views, 0), 0);
 
-      const totals = yield* views.totals(["acme.com", BOARD_VIEWS, "nobody.com"], 30);
-      assert.strictEqual(totals.get("acme.com"), 2);
-      assert.strictEqual(totals.get(BOARD_VIEWS), 1);
-      assert.isFalse(totals.has("nobody.com"));
-      assert.strictEqual((yield* views.totals([], 30)).size, 0);
+      // The same zero-filled days as `daily`, for many sites in one query.
+      const many = yield* views.dailyMany(["acme.com", BOARD_VIEWS, "nobody.com"], 7);
+      assert.deepStrictEqual(many.get("acme.com"), [0, 0, 0, 0, 0, 0, 2]);
+      assert.deepStrictEqual(many.get(BOARD_VIEWS), [0, 0, 0, 0, 0, 0, 1]);
+      assert.isFalse(many.has("nobody.com"));
+      assert.strictEqual((yield* views.dailyMany([], 30)).size, 0);
     }).pipe(Effect.provide(layer)),
   );
 });
 
-describe("Orders.paidForSite", () => {
+describe("Orders.paidSites", () => {
   const buyer = CustomerId.make("cBuyer00000000000000000");
   const stranger = CustomerId.make("cStranger00000000000000");
 
-  it.effect("is true only for the customer who paid for that site", () =>
+  it.effect("lists the sites a customer paid for, and only theirs", () =>
     Effect.gen(function* () {
       const orders = yield* Orders;
       const order = yield* orders.create({
@@ -49,12 +50,11 @@ describe("Orders.paidForSite", () => {
         entryId: null,
       });
       // Checkout started but not paid: not theirs to rejudge yet.
-      assert.isFalse(yield* orders.paidForSite(buyer, "acme.com"));
+      assert.deepStrictEqual(yield* orders.paidSites(buyer), []);
 
       yield* orders.markPaid(order.id);
-      assert.isTrue(yield* orders.paidForSite(buyer, "acme.com"));
-      assert.isFalse(yield* orders.paidForSite(stranger, "acme.com"));
-      assert.isFalse(yield* orders.paidForSite(buyer, "other.com"));
+      assert.deepStrictEqual(yield* orders.paidSites(buyer), ["acme.com"]);
+      assert.deepStrictEqual(yield* orders.paidSites(stranger), []);
     }).pipe(Effect.provide(layer)),
   );
 });

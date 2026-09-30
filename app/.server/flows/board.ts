@@ -15,8 +15,13 @@ export const VIEW_DAYS = 30;
  * time, the buyer's in-flight judgments and, on /s/<site>, that business
  * opened in place (on the page where it ranks).
  *
- * A full page load counts one board view; opening a business counts one view
- * of that business (client-side opens included). Bots aren't counted.
+ * Every listed business comes with what its opened row shows (Jev's
+ * reasoning, its views per day, whether this visitor may rejudge it), so the
+ * browser opens and closes rows without asking the server again.
+ *
+ * A full page load counts one board view; loading /s/<site> counts one view of
+ * that business (rows opened in the browser report theirs to /api/view).
+ * Bots aren't counted.
  */
 export const loadBoard = Effect.fn("loadBoard")(function* (openSiteKey: string | null) {
   const board = yield* Board;
@@ -36,20 +41,26 @@ export const loadBoard = Effect.fn("loadBoard")(function* (openSiteKey: string |
 
   const listing = yield* board.page({ page, pageSize: PAGE_SIZE, sort: "rank" });
   const boardViews = yield* views.daily(BOARD_VIEWS, VIEW_DAYS);
-  const rowViews = Object.fromEntries(
-    yield* views.totals(
-      listing.entries.map((entry) => entry.siteKey),
-      VIEW_DAYS,
-    ),
+  const siteKeys = listing.entries.map((entry) => entry.siteKey);
+  const [reasoning, dailyViews, paidSites] = yield* Effect.all(
+    [
+      board.reasoning(listing.entries.map((entry) => entry.id)),
+      views.dailyMany(siteKeys, VIEW_DAYS),
+      orders.paidSites(current.visitorId),
+    ],
+    { concurrency: "unbounded" },
   );
-
-  const details = open
-    ? {
-        judgment: (yield* board.judgments(open.id))[0] ?? null,
-        views: yield* views.daily(open.siteKey, VIEW_DAYS),
-        canRejudge: yield* orders.paidForSite(current.visitorId, open.siteKey),
-      }
-    : null;
+  const paid = new Set(paidSites);
+  const rows: Record<string, RowDetails> = Object.fromEntries(
+    listing.entries.map((entry) => [
+      entry.siteKey,
+      {
+        reasoning: reasoning.get(entry.id) ?? null,
+        views: dailyViews.get(entry.siteKey) ?? [],
+        canRejudge: paid.has(entry.siteKey),
+      },
+    ]),
+  );
 
   // Judgments this visitor paid for that are still running, so a closed tab can find its way back.
   const judging = (yield* orders.recentForCustomer(current.visitorId, 5))
@@ -67,9 +78,10 @@ export const loadBoard = Effect.fn("loadBoard")(function* (openSiteKey: string |
   return {
     listing,
     boardViews,
-    /** Views of each listed business over the last VIEW_DAYS days, by site key. */
-    rowViews,
-    open: open && details ? { entry: open, ...details } : null,
+    /** What each listed business shows when opened, by site key. */
+    rows,
+    /** The business opened in place (/s/<site>), if any. */
+    open,
     judging,
     checkoutCancelled: cancelledOrder !== null,
     cancelledSite,
@@ -77,4 +89,25 @@ export const loadBoard = Effect.fn("loadBoard")(function* (openSiteKey: string |
   };
 });
 
+/** A listed business's opened row. */
+export interface RowDetails {
+  /** Why Jev ranked it where it is (its current verdict's reasoning). */
+  readonly reasoning: string | null;
+  /** Views per day over the last VIEW_DAYS days, the same days as `boardViews`; empty when nobody looked. */
+  readonly views: ReadonlyArray<number>;
+  /** This visitor paid for a judgment of it, so they see "Rejudge". */
+  readonly canRejudge: boolean;
+}
+
 export type BoardData = Effect.Success<ReturnType<typeof loadBoard>>;
+
+/**
+ * A row opened in the browser (no page load) counts one view of that business,
+ * like loading /s/<site> would. Unknown sites and bots aren't counted.
+ */
+export const recordRowView = Effect.fn("recordRowView")(function* (siteKey: string) {
+  const current = yield* CurrentRequest;
+  if (isbot(current.request.headers.get("user-agent") ?? "")) return;
+  const entry = yield* (yield* Board).findBySiteKey(siteKey.trim().toLowerCase().slice(0, 300));
+  if (Option.isSome(entry)) yield* (yield* Views).record([entry.value.siteKey]);
+});

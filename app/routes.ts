@@ -1,9 +1,10 @@
 import { type RouteConfig, index, route } from "@react-router/dev/routes";
 
 export default [
-  index("routes/home.tsx"),
-  // The board with one business opened: /s/acme.com, /s/github.com/acme
-  route("s/*", "routes/entry.tsx"),
+  // The board, and the board with one business opened: /s/acme.com, /s/github.com/acme.
+  // One module for both, so opening and closing a row keeps the page mounted.
+  index("routes/board.tsx", { id: "home" }),
+  route("s/*", "routes/board.tsx", { id: "entry" }),
   // POST-only: "Add my business · $5" / "Rejudge · $5"
   route("judge", "routes/judge.tsx"),
   route("judging/:orderId", "routes/judging.tsx"),
@@ -15,6 +16,8 @@ export default [
   route("go/*", "routes/go.ts"),
   // Autumn (Svix-signed) payment webhook
   route("api/autumn/webhook", "routes/api.autumn-webhook.ts"),
+  // Beacon: a board row was opened in the browser (counts a view)
+  route("api/view", "routes/api.view.ts"),
   route("og.png", "routes/og-default.ts"),
   route("og/*", "routes/og.ts"),
   route("badge/*", "routes/badge.ts"),

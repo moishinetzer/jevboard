@@ -264,6 +264,8 @@ export class Board extends Context.Service<
     /** Atomically writes a finished judgment, its placement and the order's completion. */
     readonly commitPlacement: (input: CommitPlacementInput) => Effect.Effect<PlacementResult>;
     readonly judgments: (entryId: EntryId) => Effect.Effect<ReadonlyArray<Judgment>>;
+    /** Jev's reasoning behind each entry's current verdict, by entry id (at most 100 ids). */
+    readonly reasoning: (entryIds: ReadonlyArray<EntryId>) => Effect.Effect<ReadonlyMap<EntryId, string>>;
     readonly judgment: (id: string) => Effect.Effect<Option.Option<Judgment>>;
     readonly events: (options: { readonly afterId?: number | undefined; readonly limit: number }) => Effect.Effect<ReadonlyArray<BoardEvent>>;
     readonly stats: Effect.Effect<BoardStats>;
@@ -689,6 +691,14 @@ export class Board extends Context.Service<
         return rows.map(toJudgment);
       }, Effect.orDie);
 
+      const reasoning = Effect.fn("Board.reasoning")(function* (entryIds: ReadonlyArray<EntryId>) {
+        if (entryIds.length === 0) return new Map<EntryId, string>();
+        const rows = yield* sql<{ readonly id: string; readonly reasoning: string }>`
+          SELECT e.id, j.reasoning FROM entries e JOIN judgments j ON j.id = e.judgment_id
+          WHERE e.id IN ${sql.in(entryIds)}`;
+        return new Map(rows.map((row) => [row.id as EntryId, row.reasoning]));
+      }, Effect.orDie);
+
       const judgment = Effect.fn("Board.judgment")(function* (id: string) {
         const rows = yield* sql<JudgmentRow>`SELECT * FROM judgments WHERE id = ${id}`;
         return Option.map(Option.fromNullishOr(rows[0]), toJudgment);
@@ -772,6 +782,7 @@ export class Board extends Context.Service<
         tiedGroup,
         commitPlacement,
         judgments,
+        reasoning,
         judgment,
         events,
         stats,

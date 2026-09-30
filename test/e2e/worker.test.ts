@@ -257,6 +257,20 @@ describe("Jevboard Worker (simulated payments, mock Jev)", () => {
       expect(bot.status).toBe(200);
     }
     expect(await jev.views(CLOSED_TAB_SITE)).toBe(site + 1);
+
+    // A row opened in the browser (no page load) reports its view as a beacon. Same rules.
+    const beacon = (agent: string, siteKey: string) =>
+      fetch(new URL("/api/view", jev.baseUrl), {
+        method: "POST",
+        headers: { "User-Agent": agent, "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ site: siteKey }),
+      });
+    expect((await beacon(person["User-Agent"], CLOSED_TAB_SITE)).status).toBe(204);
+    expect(await jev.views(CLOSED_TAB_SITE)).toBe(site + 2);
+    expect((await beacon("Googlebot/2.1 (+http://www.google.com/bot.html)", CLOSED_TAB_SITE)).status).toBe(204);
+    expect((await beacon(person["User-Agent"], "not-on-the-board.example")).status).toBe(204);
+    expect(await jev.views(CLOSED_TAB_SITE)).toBe(site + 2);
+    expect(await jev.views("not-on-the-board.example")).toBe(0);
   });
 
   it("POST /api/autumn/webhook is a 404 without AUTUMN_WEBHOOK_SECRET", async () => {

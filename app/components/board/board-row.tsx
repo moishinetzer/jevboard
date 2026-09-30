@@ -1,18 +1,13 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import type { BoardEntry, Judgment } from "~/.server/domain/models";
+import type { RowDetails } from "~/.server/flows/board";
+import type { BoardEntry } from "~/.server/domain/models";
 import { JudgeForm } from "~/components/judge-form";
 import { JevFace, MEDAL_TINT, medalFor, RankBadge } from "~/components/logo";
 import { Meter, SiteAvatar, ViewsSpark } from "~/components/ui";
 import { goPath } from "~/components/verdict/links";
 import { formatCount } from "~/lib/format";
 import { entryPath } from "~/lib/site-key";
-
-interface Details {
-  readonly judgment: Judgment | null;
-  readonly views: ReadonlyArray<{ readonly day: string; readonly views: number }>;
-  readonly canRejudge: boolean;
-}
 
 const BREAKDOWN = [
   ["clarity", "Clarity"],
@@ -22,34 +17,68 @@ const BREAKDOWN = [
   ["wouldJevPay", "Would Jev pay"],
 ] as const;
 
+/** How long a row takes to open or close (matches `.expander` in app.css). */
+const EXPAND_MS = 320;
+
 const views = (count: number): string => `${formatCount(count)} ${count === 1 ? "view" : "views"}`;
 
 /**
+ * True while the row is open and for the length of its closing animation,
+ * so the details stay mounted until they have slid shut.
+ */
+function usePresence(open: boolean): boolean {
+  const [present, setPresent] = useState(open);
+  if (open && !present) setPresent(true);
+  useEffect(() => {
+    if (open || !present) return;
+    const timer = setTimeout(() => setPresent(false), EXPAND_MS);
+    return () => clearTimeout(timer);
+  }, [open, present]);
+  return open || present;
+}
+
+/**
  * One business on the board. The row is a link: to /s/<site> when closed
- * (which opens it in place and counts a view), back to the board when open.
+ * (which opens it in place), back to the board when open. Everything the open
+ * row shows came with the board, so it opens at once and slides open.
  * The top three get a crown and a gold, silver or bronze tint.
  */
 export function BoardRow({
   entry,
-  viewCount,
   details,
+  days,
+  open,
   closeHref,
   first,
 }: {
   entry: BoardEntry;
-  /** Views over the last 30 days. */
-  viewCount: number;
-  /** Present when this row is the open one. */
-  details: Details | null;
+  /** What the opened row shows (preloaded with the board). */
+  details: RowDetails | null;
+  /** The days `details.views` counts, oldest first. */
+  days: ReadonlyArray<string>;
+  open: boolean;
   closeHref: string;
   /** The first row on the page (no divider above it). */
   first: boolean;
 }) {
-  const open = details !== null;
   const medal = medalFor(entry.rank);
+  const present = usePresence(open);
+  const viewCount = details?.views.reduce((sum, count) => sum + count, 0) ?? 0;
+
+  // A row open on arrival (/s/<site>) is scrolled to straight away; one opened
+  // by a click is brought into view once it has finished opening, if needed.
   const ref = useRef<HTMLLIElement>(null);
+  const arrived = useRef(false);
   useEffect(() => {
-    if (open) ref.current?.scrollIntoView({ block: "nearest" });
+    const firstRun = !arrived.current;
+    arrived.current = true;
+    if (!open) return;
+    if (firstRun) {
+      ref.current?.scrollIntoView({ block: "nearest" });
+      return;
+    }
+    const timer = setTimeout(() => ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }), EXPAND_MS);
+    return () => clearTimeout(timer);
   }, [open]);
 
   const frame = medal
@@ -61,7 +90,7 @@ export function BoardRow({
         : "border-t border-line";
 
   return (
-    <li ref={ref} className={`scroll-mt-6 ${frame}`}>
+    <li ref={ref} className={`scroll-mt-6 transition-colors duration-300 ${frame}`}>
       <Link
         to={open ? closeHref : entryPath(entry.siteKey)}
         preventScrollReset
@@ -78,9 +107,12 @@ export function BoardRow({
             <span className="ml-1.5 hidden text-[13px] font-medium text-soft sm:inline">{entry.siteKey}</span>
           </span>
           <span className="block truncate text-xs text-soft sm:hidden">{entry.siteKey}</span>
-          {open ? null : (
-            <span className="mt-[3px] hidden text-sm leading-[1.45] text-soft sm:line-clamp-2">{entry.tldr}</span>
-          )}
+          {/* On wider screens the summary stays put as the row opens (unclamped, in full ink); phones show it inside. */}
+          <span
+            className={`mt-[3px] hidden text-sm leading-[1.45] transition-colors duration-300 sm:block ${open ? "text-ink" : "text-soft sm:line-clamp-2"}`}
+          >
+            {entry.tldr}
+          </span>
         </span>
         <span className="text-right">
           <span className={`block font-display text-xl font-bold tabular-nums sm:text-[22px] ${medal ? "text-accent" : ""}`}>
@@ -89,26 +121,32 @@ export function BoardRow({
           {viewCount > 0 ? <span className="hidden text-xs text-soft sm:block">{views(viewCount)}</span> : null}
         </span>
       </Link>
-      {details ? <EntryDetails entry={entry} details={details} /> : null}
+      {present && details ? (
+        <div className="expander" data-open={open} inert={!open}>
+          <div className="min-h-0 overflow-hidden">
+            <EntryDetails entry={entry} details={details} days={days} />
+          </div>
+        </div>
+      ) : null}
     </li>
   );
 }
 
-function EntryDetails({ entry, details }: { entry: BoardEntry; details: Details }) {
-  const { judgment } = details;
-  const total = details.views.reduce((sum, day) => sum + day.views, 0);
+function EntryDetails({ entry, details, days }: { entry: BoardEntry; details: RowDetails; days: ReadonlyArray<string> }) {
+  const total = details.views.reduce((sum, count) => sum + count, 0);
+  const daily = days.map((day, index) => ({ day, views: details.views[index] ?? 0 }));
 
   return (
     <div className="px-3.5 pb-4 sm:pr-[22px] sm:pb-[22px] sm:pl-[90px]">
-      <p className="text-[15px] leading-[1.55] sm:text-[17px]">{entry.tldr}</p>
+      <p className="text-[15px] leading-[1.55] sm:hidden">{entry.tldr}</p>
 
-      {judgment ? (
+      {details.reasoning ? (
         <>
-          <h3 className="mt-3.5 text-xs font-bold sm:mt-[18px] sm:text-[13px]">Why Jev put it at #{entry.rank}</h3>
-          <p className="mt-1 text-sm leading-relaxed text-soft sm:text-[15px]">{judgment.reasoning}</p>
+          <h3 className="mt-3.5 text-xs font-bold sm:mt-2 sm:text-[13px]">Why Jev put it at #{entry.rank}</h3>
+          <p className="mt-1 text-sm leading-relaxed text-soft sm:text-[15px]">{details.reasoning}</p>
           <div className="mt-3 grid gap-2 sm:mt-4 sm:grid-cols-2 sm:gap-x-7 sm:gap-y-2.5">
             {BREAKDOWN.map(([key, label]) => (
-              <Meter key={key} label={label} value={judgment.subscores[key]} />
+              <Meter key={key} label={label} value={entry.subscores[key]} />
             ))}
           </div>
         </>
@@ -127,7 +165,7 @@ function EntryDetails({ entry, details }: { entry: BoardEntry; details: Details 
 
       <div className="mt-3.5 flex flex-col gap-3 sm:mt-[18px] sm:flex-row sm:items-center sm:gap-2.5">
         <p className="flex items-center gap-2 text-xs text-soft sm:gap-2.5 sm:text-[13px]">
-          <ViewsSpark days={details.views} />
+          <ViewsSpark days={daily} />
           {views(total)} in the last 30 days
         </p>
         <div className="flex flex-col gap-2 sm:ml-auto sm:flex-row sm:items-start">
