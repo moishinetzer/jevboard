@@ -1,12 +1,12 @@
-// @ts-nocheck -- `atmn` (Autumn's CLI, v2) is not a project dependency, so this
-// file is not type-checked by `tsc`. To use it: `pnpm add -D atmn@^2`, then
-// `pnpm atmn push` (preview) / `pnpm atmn push --yes` (apply to the sandbox),
-// adding `-p` for production. Once atmn is installed you can delete this line.
-// See docs/payments.md; the app reads these ids from AUTUMN_PLAN_ID / AUTUMN_FEATURE_ID.
+// Autumn catalog, pushed with `pnpm atmn push` (preview) / `pnpm atmn push --yes`
+// (sandbox), adding `-p` for production. A push replaces the whole catalog of that
+// Autumn environment. See docs/payments.md; the app reads these ids from
+// AUTUMN_PLAN_ID / AUTUMN_FEATURE_ID.
 import { atmn, feature, plan, webhook } from "atmn";
 
 /** One judgment credit. Granted by each purchase, consumed when Jev judges the order. */
 export const judgment = feature({
+  internalId: "fe_3K33gds9qqm1EqmUJLEZ76EaxUE",
   featureId: "judgment",
   name: "Judgment",
   type: "metered",
@@ -19,7 +19,9 @@ export const judgment = feature({
  * grants exactly one `judgment` that never resets.
  */
 export const judgmentPlan = plan({
+  internalId: "prod_3K33gcFeeNiuHNykGvb65MWOXA7",
   planId: "judgment",
+  versionSlug: "v1",
   name: "Jev Judgment",
   description: "One judgment of one website by Jev: a verdict and a 1-1000 score on the public leaderboard.",
   active: true,
