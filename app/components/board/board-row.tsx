@@ -22,7 +22,6 @@ const EXPAND_MS = 320;
 
 const views = (count: number): string => `${formatCount(count)} ${count === 1 ? "view" : "views"}`;
 const sameText = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase();
-const clicks = (count: number): string => `${formatCount(count)} ${count === 1 ? "click" : "clicks"}`;
 
 /** The top three share one colour that fades with rank, like outbid's. */
 const TOP_TINT: Record<number, string> = { 1: "bg-accent/14", 2: "bg-accent/8", 3: "bg-accent/4" };
@@ -49,8 +48,7 @@ function usePresence(open: boolean): boolean {
 /**
  * One business on the board, the way outbid.lol lays one out: a faded rank,
  * its app icon, and its own title and description from its homepage, then
- * when Jev judged it, its address, its views, how many clicks the board
- * sent it and "see details". Clicking the row opens the site in a new tab; "see details"
+ * when Jev judged it, its address, its views and "see details". Clicking the row opens the site in a new tab; "see details"
  * or the chevron opens Jev's verdict in place (/s/<site>). Everything the
  * open row shows came with the board, so it opens at once and slides open.
  * The top three are tinted in one colour that fades from #1 to #3.
@@ -137,12 +135,6 @@ export function BoardRow({
               <>
                 <span aria-hidden>·</span>
                 <span>{views(viewCount)}</span>
-              </>
-            ) : null}
-            {entry.clicks > 0 ? (
-              <>
-                <span aria-hidden>·</span>
-                <span>{clicks(entry.clicks)}</span>
               </>
             ) : null}
             <span aria-hidden>·</span>
