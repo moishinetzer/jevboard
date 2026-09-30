@@ -244,11 +244,15 @@ describe("handleAutumnWebhook", () => {
     });
 
   /** Orders + queue fakes; `settle` flips the order to paid unless told to fail. */
-  const harness = (options: { readonly initial: Option.Option<OrderStatus>; readonly settleFails?: boolean }) => {
+  const harness = (options: {
+    readonly initial: Option.Option<OrderStatus>;
+    readonly settleFails?: boolean;
+    readonly secrets?: string;
+  }) => {
     let status = options.initial;
     const settled: Array<{ orderId: string; customerId: string }> = [];
     const layer = Layer.mergeAll(
-      autumnConfig(Option.some(Redacted.make(SECRET))),
+      autumnConfig(Option.some(Redacted.make(options.secrets ?? SECRET))),
       Layer.mock(Orders, { find: () => Effect.sync(() => Option.map(status, order)) }),
       Layer.mock(JudgmentQueue, {
         settle: (orderId, customerId) =>
@@ -296,6 +300,20 @@ describe("handleAutumnWebhook", () => {
       assert.strictEqual(result.status, 200);
       assert.deepStrictEqual(result.body, { ok: true, orderId: ORDER, status: "paid" });
       assert.deepStrictEqual(h.settled, [{ orderId: ORDER, customerId: VISITOR }]);
+    }),
+  );
+
+  it.effect("accepts deliveries signed with any of several configured secrets (sandbox and production)", () =>
+    Effect.gen(function* () {
+      const other = "whsec_c2VjcmV0LXRoYXQtaXMtbm90LW91cnM=";
+      for (const secrets of [`${other} ${SECRET}`, `${SECRET},${other}`, `  ${other}\n${SECRET}  `]) {
+        const h = harness({ initial: Option.some("pending_payment"), secrets });
+        const result = yield* handle(signedRequest(event), h.layer);
+        assert.strictEqual(result.status, 200, secrets);
+        assert.deepStrictEqual(h.settled, [{ orderId: ORDER, customerId: VISITOR }]);
+      }
+      const h = harness({ initial: Option.some("pending_payment"), secrets: `${other} ${other}` });
+      assert.strictEqual((yield* handle(signedRequest(event), h.layer)).status, 401);
     }),
   );
 

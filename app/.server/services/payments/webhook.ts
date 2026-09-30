@@ -210,12 +210,19 @@ export const handleAutumnWebhook = Effect.fn("handleAutumnWebhook")(function* (r
 
   const headers = svixHeaders(request.headers);
   const now = yield* Clock.currentTimeMillis;
-  const verification = yield* verifySvixSignature({
-    secret: Redacted.value(secret.value),
-    headers,
-    body: body.value,
-    nowSeconds: Math.floor(now / 1000),
-  });
+  // AUTUMN_WEBHOOK_SECRET may hold several secrets (space or comma separated),
+  // e.g. the sandbox and production endpoints while switching over. Any match wins.
+  const secrets = Redacted.value(secret.value).split(/[\s,]+/).filter((value) => value !== "");
+  let verification: SvixVerification = { ok: false, status: 401, reason: "no webhook secret configured" };
+  for (const candidate of secrets) {
+    verification = yield* verifySvixSignature({
+      secret: candidate,
+      headers,
+      body: body.value,
+      nowSeconds: Math.floor(now / 1000),
+    });
+    if (verification.ok || verification.status === 400) break;
+  }
   if (!verification.ok) {
     yield* Effect.logWarning("Rejected Autumn webhook", { reason: verification.reason, svixId: headers.id });
     return json({ ok: false, error: "invalid signature" }, verification.status);
