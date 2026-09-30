@@ -126,8 +126,14 @@ export const startJevboard = async (): Promise<Jevboard> => {
   const dir = mkdtempSync(join(tmpdir(), "jevboard-e2e-"));
   cpSync(join(ROOT, "build"), join(dir, "build"), { recursive: true, filter: (source) => basename(source) !== ".dev.vars" });
   const configPath = join(dir, "build/server/wrangler.json");
-  const config = JSON.parse(readFileSync(configPath, "utf8")) as { d1_databases: Array<{ migrations_dir?: string }> };
+  const config = JSON.parse(readFileSync(configPath, "utf8")) as {
+    d1_databases: Array<{ migrations_dir?: string }>;
+    vars?: Record<string, unknown>;
+  };
   for (const database of config.d1_databases) database.migrations_dir = join(ROOT, "migrations");
+  // The deployed PUBLIC_URL would send redirects and share links to production; without
+  // it the app uses the request's own origin, i.e. this harness.
+  delete config.vars?.["PUBLIC_URL"];
   writeFileSync(configPath, JSON.stringify(config));
 
   const forbiddenCalls: Array<string> = [];
