@@ -63,7 +63,7 @@ export function BoardRow({
 }) {
   const medal = medalFor(entry.rank);
   const present = usePresence(open);
-  const viewCount = details?.views.reduce((sum, count) => sum + count, 0) ?? 0;
+  const viewCount = details?.totalViews ?? 0;
 
   // A row open on arrival (/s/<site>) is scrolled to straight away; one opened
   // by a click is brought into view once it has finished opening, if needed.
@@ -133,7 +133,6 @@ export function BoardRow({
 }
 
 function EntryDetails({ entry, details, days }: { entry: BoardEntry; details: RowDetails; days: ReadonlyArray<string> }) {
-  const total = details.views.reduce((sum, count) => sum + count, 0);
   const daily = days.map((day, index) => ({ day, views: details.views[index] ?? 0 }));
 
   return (
@@ -166,7 +165,7 @@ function EntryDetails({ entry, details, days }: { entry: BoardEntry; details: Ro
       <div className="mt-3.5 flex flex-col gap-3 sm:mt-[18px] sm:flex-row sm:items-center sm:gap-2.5">
         <p className="flex items-center gap-2 text-xs text-soft sm:gap-2.5 sm:text-[13px]">
           <ViewsSpark days={daily} />
-          {views(total)} in the last 30 days
+          {views(details.totalViews)} so far
         </p>
         <div className="flex flex-col gap-2 sm:ml-auto sm:flex-row sm:items-start">
           <a href={goPath(entry.siteKey)} target="_blank" rel="sponsored noopener" className="btn btn-ghost h-11 px-4 text-sm sm:h-10">

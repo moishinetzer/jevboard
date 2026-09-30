@@ -32,6 +32,8 @@ export class Views extends Context.Service<
       siteKeys: ReadonlyArray<string>,
       days: number,
     ) => Effect.Effect<ReadonlyMap<string, ReadonlyArray<number>>>;
+    /** Every view ever counted for each site key. Keys nobody viewed are left out. */
+    readonly allTime: (siteKeys: ReadonlyArray<string>) => Effect.Effect<ReadonlyMap<string, number>>;
   }
 >()("jevboard/Views") {
   static readonly layer = Layer.effect(
@@ -85,7 +87,16 @@ export class Views extends Context.Service<
         return counts as ReadonlyMap<string, ReadonlyArray<number>>;
       }, Effect.orDie);
 
-      return Views.of({ record, daily, dailyMany });
+      const allTime = Effect.fn("Views.allTime")(function* (siteKeys: ReadonlyArray<string>) {
+        if (siteKeys.length === 0) return new Map<string, number>();
+        const rows = yield* sql<{ readonly siteKey: string; readonly views: number }>`
+          SELECT site_key, SUM(count) AS views FROM views
+          WHERE site_key IN ${sql.in(siteKeys)}
+          GROUP BY site_key`;
+        return new Map(rows.map((row) => [row.siteKey, Number(row.views)]));
+      }, Effect.orDie);
+
+      return Views.of({ record, daily, dailyMany, allTime });
     }),
   );
 }

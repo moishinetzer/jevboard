@@ -42,10 +42,11 @@ export const loadBoard = Effect.fn("loadBoard")(function* (openSiteKey: string |
   const listing = yield* board.page({ page, pageSize: PAGE_SIZE, sort: "rank" });
   const boardViews = yield* views.daily(BOARD_VIEWS, VIEW_DAYS);
   const siteKeys = listing.entries.map((entry) => entry.siteKey);
-  const [reasoning, dailyViews, paidSites] = yield* Effect.all(
+  const [reasoning, dailyViews, totalViews, paidSites] = yield* Effect.all(
     [
       board.reasoning(listing.entries.map((entry) => entry.id)),
       views.dailyMany(siteKeys, VIEW_DAYS),
+      views.allTime(siteKeys),
       orders.paidSites(current.visitorId),
     ],
     { concurrency: "unbounded" },
@@ -57,6 +58,7 @@ export const loadBoard = Effect.fn("loadBoard")(function* (openSiteKey: string |
       {
         reasoning: reasoning.get(entry.id) ?? null,
         views: dailyViews.get(entry.siteKey) ?? [],
+        totalViews: totalViews.get(entry.siteKey) ?? 0,
         canRejudge: paid.has(entry.siteKey),
       },
     ]),
@@ -95,6 +97,8 @@ export interface RowDetails {
   readonly reasoning: string | null;
   /** Views per day over the last VIEW_DAYS days, the same days as `boardViews`; empty when nobody looked. */
   readonly views: ReadonlyArray<number>;
+  /** Every view it has had. */
+  readonly totalViews: number;
   /** This visitor paid for a judgment of it, so they see "Rejudge". */
   readonly canRejudge: boolean;
 }

@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
+import { SqlClient } from "effect/sql";
 import { CustomerId } from "~/.server/domain/ids";
 import { Orders } from "~/.server/services/Orders";
 import { BOARD_VIEWS, Views } from "~/.server/services/Views";
@@ -31,6 +32,16 @@ describe("Views", () => {
       assert.deepStrictEqual(many.get(BOARD_VIEWS), [0, 0, 0, 0, 0, 0, 1]);
       assert.isFalse(many.has("nobody.com"));
       assert.strictEqual((yield* views.dailyMany([], 30)).size, 0);
+
+      // All-time totals count views outside the 30-day window too.
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO views (site_key, day, count) VALUES ('acme.com', '2020-01-01', 5)`;
+      assert.deepStrictEqual((yield* views.dailyMany(["acme.com"], 30)).get("acme.com")?.reduce((a, b) => a + b, 0), 2);
+      const totals = yield* views.allTime(["acme.com", BOARD_VIEWS, "nobody.com"]);
+      assert.strictEqual(totals.get("acme.com"), 7);
+      assert.strictEqual(totals.get(BOARD_VIEWS), 1);
+      assert.isFalse(totals.has("nobody.com"));
+      assert.strictEqual((yield* views.allTime([])).size, 0);
     }).pipe(Effect.provide(layer)),
   );
 });

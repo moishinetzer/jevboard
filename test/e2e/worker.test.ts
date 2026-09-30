@@ -247,7 +247,7 @@ describe("Jevboard Worker (simulated payments, mock Jev)", () => {
 
     const page = await fetch(new URL(`/s/${CLOSED_TAB_SITE}`, jev.baseUrl), { headers: person });
     expect(page.status).toBe(200);
-    expect(textOf(await page.text())).toContain("in the last 30 days");
+    expect(textOf(await page.text())).toMatch(/\b\d[\d,]* views? so far/);
     expect(await jev.views(CLOSED_TAB_SITE)).toBe(site + 1);
     expect(await jev.views("")).toBe(board + 1);
 
