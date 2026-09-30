@@ -33,8 +33,9 @@ export const judgmentPlan = plan({
 // Optional: manage the webhook here too. Only included when AUTUMN_WEBHOOK_URL
 // is set (https, public — e.g. https://jevboard.com/api/autumn/webhook), so a
 // plain push leaves your webhooks alone. atmn writes the new endpoint's signing
-// secret to your env file as AUTUMN_WEBHOOK_JEVBOARD_<ENV>_SECRET: copy it into
-// AUTUMN_WEBHOOK_SECRET for the app.
+// secret as AUTUMN_WEBHOOK_JEVBOARD_SANDBOX_SECRET (.env.local or .env), or as
+// AUTUMN_WEBHOOK_JEVBOARD_SECRET (.env.prod) for AUTUMN_WEBHOOK_ENV=live with -p.
+// Copy it into AUTUMN_WEBHOOK_SECRET for the app.
 const webhookUrl = process.env.AUTUMN_WEBHOOK_URL;
 
 export default atmn({

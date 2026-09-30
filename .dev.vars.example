@@ -1,6 +1,6 @@
 # Local secrets for `pnpm dev` (copy to .dev.vars). Leave empty to use the
 # simulated checkout and the mock Jev.
-ANTHROPIC_API_KEY=
+OPENROUTER_API_KEY=
 AUTUMN_SECRET_KEY=
 AUTUMN_WEBHOOK_SECRET=
 PUBLIC_URL=http://localhost:5173

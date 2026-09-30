@@ -12,7 +12,7 @@
     {
       "binding": "DB",
       "database_name": "jevboard",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "6ac01423-cf16-4405-bda9-acb2eba68e17",
       "migrations_dir": "migrations"
     }
   ],

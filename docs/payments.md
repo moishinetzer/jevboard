@@ -37,9 +37,12 @@ Autumn needs one feature and one plan:
 
 There are two ways to create them:
 
-- **With the CLI.** Run `pnpm add -D atmn@^2` and `pnpm atmn login`. Then run `pnpm atmn push` to preview
-  and `pnpm atmn push --yes` to apply to the sandbox. Add `-p` to push to production. The CLI reads
-  `autumn.config.ts`.
+- **With the CLI** (`atmn` is a dev dependency). Put the sandbox key in a gitignored `.env` as
+  `AUTUMN_SECRET_KEY` (or run `pnpm atmn login`), then run `pnpm atmn push` to preview and
+  `pnpm atmn push --yes` to apply. Add `-p` to push to production, which reads `AUTUMN_PROD_SECRET_KEY`.
+  The CLI reads `autumn.config.ts` and writes the created `internalId`s back into it. A push sends the whole
+  catalog: plans and features in that Autumn environment that aren't in the config are deleted, so read the
+  preview first.
 - **In the dashboard.** Go to *Plans* → *Create plan* and set:
   - name and id: `judgment`;
   - price: **One-off**, $5;
@@ -69,9 +72,10 @@ Stripe account, connected in the Autumn dashboard under *Deploy to Production*.
    Autumn accepts only public https URLs. For local testing, use a tunnel such as ngrok.
 2. Copy the endpoint's signing secret (`whsec_…`) into **`AUTUMN_WEBHOOK_SECRET`** (`wrangler secret put AUTUMN_WEBHOOK_SECRET`).
    The secret is shown once.
-3. You can also let `atmn` manage the endpoint. Push with `AUTUMN_WEBHOOK_URL=<url>` set, and optionally
-   `AUTUMN_WEBHOOK_ENV=live`. `atmn` writes the new secret to your env file as
-   `AUTUMN_WEBHOOK_JEVBOARD_<ENV>_SECRET`; copy it into `AUTUMN_WEBHOOK_SECRET`.
+3. You can also let `atmn` manage the endpoint. Push with `AUTUMN_WEBHOOK_URL=<url>` set. For the sandbox,
+   `atmn` writes the new secret to `.env.local` (or `.env`) as `AUTUMN_WEBHOOK_JEVBOARD_SANDBOX_SECRET`. For
+   production, set `AUTUMN_WEBHOOK_ENV=live` and push with `-p`; the secret lands in `.env.prod` as
+   `AUTUMN_WEBHOOK_JEVBOARD_SECRET`. Copy it into `AUTUMN_WEBHOOK_SECRET`.
 
 The route answers:
 

@@ -22,7 +22,7 @@ import { Presence } from "./services/Presence";
  *
  *   Worker env ─┬─ D1 (SqlClient, atomic batches) ── Board, Orders, Presence ─┐
  *               ├─ Crawler ────────────────────────────────────────────────────┼─ Pipeline
- *               ├─ Judge (Claude | mock) ──────────────────────────────────────┘
+ *               ├─ Judge (OpenRouter | mock) ──────────────────────────────────┘
  *               ├─ Payments (Autumn | simulator)
  *               ├─ JudgmentQueue (Cloudflare Queues) · RateLimiter (Rate Limiting bindings)
  *               └─ AppConfig (vars + secrets)
