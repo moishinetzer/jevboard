@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/react";
 import { useEffect } from "react";
 
 /** What the browser needs to report to PostHog (from the root loader). */
@@ -51,8 +52,9 @@ export function useAnalytics(config: AnalyticsConfig | null) {
   }, [config]);
 }
 
-/** Reports an error the app caught itself (error boundaries), when PostHog is running. */
+/** Reports an error the app caught itself (error boundaries) to Sentry and, when it's running, PostHog. */
 export const reportError = (error: unknown) => {
+  Sentry.captureException(error);
   withPostHog((posthog) => posthog.captureException(error));
 };
 

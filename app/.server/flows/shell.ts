@@ -21,6 +21,8 @@ export interface ShellData {
   readonly mode: { readonly payments: "autumn" | "fake"; readonly judge: "live" | "mock" };
   /** PostHog for the browser: the public project token, this visitor's id and their assigned test variants. */
   readonly analytics: { readonly token: string; readonly distinctId: string; readonly flags: Readonly<Record<string, string>> } | null;
+  /** Sentry for the browser (its DSN is public), or null when it's off. */
+  readonly sentry: { readonly dsn: string; readonly environment: string } | null;
   /** This visitor's variants of the live tests. */
   readonly experiments: Variants;
   readonly wallet: Wallet;
@@ -49,6 +51,10 @@ export const loadShell = Effect.gen(function* () {
     analytics: Option.match(config.posthog, {
       onNone: () => null,
       onSome: ({ token }) => ({ token, distinctId: current.visitorId, flags }),
+    }),
+    sentry: Option.match(config.sentryBrowserDsn, {
+      onNone: () => null,
+      onSome: (dsn) => ({ dsn, environment: Option.isSome(config.publicUrl) ? "production" : "development" }),
     }),
     experiments,
     wallet: walletFor(userAgent),

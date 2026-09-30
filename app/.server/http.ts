@@ -4,6 +4,7 @@ import { AppConfig } from "./config";
 import { toRouteOutcome } from "./route-errors";
 import { type AppServices, runtime } from "./runtime";
 import { AnalyticsActor } from "./services/Analytics";
+import { reportServerError } from "./report";
 import { CurrentRequest } from "./request";
 import { visitorContext } from "./visitor";
 
@@ -97,6 +98,7 @@ const run = async <A, E>(name: string, effect: Effect.Effect<A, E, RouteServices
   const outcome = toRouteOutcome(exit);
   if (outcome._tag === "Return") return outcome.value;
   if (outcome.defect) {
+    reportServerError(outcome.defect, { route: name, method: args.request.method });
     await runtime.runPromise(Effect.logError(`Unhandled failure in ${name}`, outcome.defect)).catch(() => undefined);
   }
   throw outcome.thrown;

@@ -3,6 +3,7 @@ import { Effect, Exit, Schema } from "effect";
 import { OrderId } from "../domain/ids";
 import { Pipeline } from "../services/Pipeline";
 import { CloudflareEnv, type JudgmentJob } from "./env";
+import { reportServerError } from "../report";
 
 const decodeJob = Schema.decodeUnknownOption(Schema.Struct({ orderId: OrderId }));
 
@@ -52,6 +53,7 @@ export const handleQueueBatch = (batch: MessageBatch<JudgmentJob>) =>
       if (message.attempts >= maxAttempts && job._tag === "Some") {
         // Out of retries: fail the order and refund the buyer.
         yield* Effect.logError("Queue job gave up", { queue: batch.queue, attempts: message.attempts }, exit.cause);
+        reportServerError(exit.cause, { queue: batch.queue, attempts: message.attempts, orderId: job.value.orderId });
         yield* pipeline.giveUp(job.value.orderId);
         message.ack();
       } else {

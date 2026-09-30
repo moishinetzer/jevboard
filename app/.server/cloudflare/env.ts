@@ -15,6 +15,8 @@ export interface Env {
   readonly IP_LIMITER?: RateLimit;
   /** Browser Run, for sites that only render with JavaScript. */
   readonly BROWSER?: BrowserRun;
+  /** Sentry: the Worker's project (server errors). Unset: Sentry is off. */
+  readonly SENTRY_DSN?: string;
   readonly [variable: string]: unknown;
 }
 

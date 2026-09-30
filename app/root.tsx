@@ -8,6 +8,7 @@ import {
   Scripts,
   ScrollRestoration,
   type ShouldRevalidateFunction,
+  useRouteLoaderData,
 } from "react-router";
 import type { Route } from "./+types/root";
 import { effectLoader } from "./.server/http";
@@ -49,11 +50,14 @@ export const meta: Route.MetaFunction = () => [
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  // Read by entry.client.tsx before hydration, so Sentry catches errors from the very start.
+  const sentry = useRouteLoaderData<typeof loader>("root")?.sentry;
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {sentry ? <meta name="sentry" content={JSON.stringify(sentry)} /> : null}
         <Meta />
         <Links />
       </head>

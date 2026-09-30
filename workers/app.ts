@@ -1,9 +1,11 @@
-import type { ExecutionContext, MessageBatch, ScheduledController } from "@cloudflare/workers-types";
+import type { ExecutionContext, ExportedHandler, MessageBatch, ScheduledController } from "@cloudflare/workers-types";
+import * as Sentry from "@sentry/cloudflare";
 import { createRequestHandler, RouterContextProvider } from "react-router";
 import type { Env, JudgmentJob } from "../app/.server/cloudflare/env";
 import { handleQueueBatch } from "../app/.server/cloudflare/jobs";
 import { backfillSiteProfiles, runMaintenance } from "../app/.server/flows/maintenance";
 import { flushTelemetry } from "../app/.server/observability";
+import { reportServerError } from "../app/.server/report";
 import { runtime } from "../app/.server/runtime";
 import { proxyPostHog } from "./posthog-proxy";
 
@@ -42,7 +44,7 @@ const flush = (): Promise<void> => runtime.runPromise(flushTelemetry).catch(() =
  * - scheduled: every-minute maintenance (payment sweeper, stalled-job recovery, refunds,
  *   homepage profiles for older entries)
  */
-export default {
+const handler = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const proxied = proxyPostHog(request, env);
     if (proxied) return proxied;
@@ -59,7 +61,28 @@ export default {
   scheduled(_controller: ScheduledController, _env: Env, ctx: ExecutionContext) {
     // The two run independently: a failing crawl never holds up payments or refunds.
     ctx.waitUntil(
-      Promise.allSettled([runtime.runPromise(runMaintenance), runtime.runPromise(backfillSiteProfiles)]).finally(flush),
+      Promise.allSettled([runtime.runPromise(runMaintenance), runtime.runPromise(backfillSiteProfiles)])
+        .then((results) => {
+          for (const result of results) if (result.status === "rejected") reportServerError(result.reason, { cron: "maintenance" });
+        })
+        .finally(flush),
     );
   },
 };
+
+/**
+ * Errors to Sentry (server side; the browser reports its own, see
+ * app/entry.client.tsx). Without SENTRY_DSN it stays off. No tracing: that's
+ * PostHog's job.
+ */
+export default Sentry.withSentry(
+  (env: Env) =>
+    typeof env.SENTRY_DSN === "string" && env.SENTRY_DSN !== ""
+      ? {
+          dsn: env.SENTRY_DSN,
+          environment: typeof env["PUBLIC_URL"] === "string" ? "production" : "development",
+          tracesSampleRate: 0,
+        }
+      : undefined,
+  handler as unknown as ExportedHandler<Env>,
+);

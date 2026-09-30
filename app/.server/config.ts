@@ -48,6 +48,8 @@ export interface AppConfigShape {
     /** Ingestion host, e.g. https://eu.i.posthog.com */
     readonly host: string;
   }>;
+  /** Sentry's browser project DSN (public by design, like the PostHog token). None: the browser doesn't report to Sentry. */
+  readonly sentryBrowserDsn: Option.Option<string>;
 }
 
 /** Jev's default model; pick another OpenRouter id with JEV_MODEL. */
@@ -82,6 +84,7 @@ const config = Effect.gen(function* () {
   const workers = yield* Config.Int("JEV_WORKERS").pipe(Config.withDefault(2));
   const posthogToken = yield* Config.option(Config.String("POSTHOG_TOKEN"));
   const posthogHost = yield* Config.String("POSTHOG_HOST").pipe(Config.withDefault("https://eu.i.posthog.com"));
+  const sentryBrowserDsn = yield* Config.option(Config.String("SENTRY_BROWSER_DSN"));
   const crawlUserAgent = yield* Config.String("JEV_USER_AGENT").pipe(
     Config.withDefault("Mozilla/5.0 (compatible; JevBot/1.0; +https://rankedbyjev.com/faq#jevbot)"),
   );
@@ -118,6 +121,7 @@ const config = Effect.gen(function* () {
       Option.filter(posthogToken, (token) => token.trim() !== ""),
       (token) => ({ token: token.trim(), host: posthogHost.replace(/\/+$/, "") }),
     ),
+    sentryBrowserDsn: Option.filter(sentryBrowserDsn, (dsn) => dsn.trim() !== ""),
   } satisfies AppConfigShape;
 });
 
@@ -137,6 +141,7 @@ export class AppConfig extends Context.Service<AppConfig, AppConfigShape>()("jev
         workers: 1,
         crawlUserAgent: "JevBot/test",
         posthog: Option.none(),
+        sentryBrowserDsn: Option.none(),
         ...overrides,
       }),
     );
