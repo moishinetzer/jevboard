@@ -139,15 +139,19 @@ Non-secret settings live in `vars` in [`wrangler.jsonc`](wrangler.jsonc); secret
 ## Deploying
 
 ```sh
-wrangler d1 create jevboard                 # paste the id into wrangler.jsonc
-wrangler queues create jevboard-judgments
-wrangler queues create jevboard-placements
-wrangler secret put ANTHROPIC_API_KEY
-wrangler secret put AUTUMN_SECRET_KEY
-wrangler secret put AUTUMN_WEBHOOK_SECRET   # optional
+pnpm wrangler login
+pnpm wrangler d1 create jevboard            # paste the id into wrangler.jsonc
+pnpm wrangler queues create jevboard-judgments
+pnpm wrangler queues create jevboard-placements
 pnpm db:migrate:remote
-pnpm deploy                                 # react-router build && wrangler deploy
+# First deploy: upload the secrets with the Worker, since a production build refuses to
+# start without ANTHROPIC_API_KEY and AUTUMN_SECRET_KEY. Keep this file out of the repo.
+pnpm run build && pnpm wrangler deploy --secrets-file ~/jevboard.secrets.env
+# Later deploys (secrets persist; change one with `pnpm wrangler secret put NAME`):
+pnpm run deploy                             # react-router build && wrangler deploy
 ```
+
+Use `pnpm run deploy`, not `pnpm deploy`, which is pnpm's own workspace command.
 
 Then point the Autumn webhook at `https://<your-domain>/api/autumn/webhook` ([docs/payments.md](docs/payments.md)).
 
