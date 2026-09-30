@@ -64,7 +64,7 @@ const waitForVerdict = (browser: Browser, orderId: string) =>
 
 /**
  * /s/<site> is the board with that business opened in place: its rank in the
- * title, the details section rendered with its score, and its roll count from D1.
+ * title, the details section rendered, and its score and roll count from D1.
  */
 const verdictOf = async (page: Visit, site: string) => {
   const rank = /: #(\d+) on Ranked by Jev$/.exec(titleOf(page.html));
@@ -73,7 +73,6 @@ const verdictOf = async (page: Visit, site: string) => {
   expect(textOf(page.html)).toContain(`Why Jev put it at #${rank?.[1]}`);
   const entry = await jev.entry(site);
   expect(entry, `${site} on the board`).not.toBeNull();
-  expect(page.html).toContain(`>${entry?.score}<`);
   return { score: entry?.score ?? 0, rolls: entry?.rolls ?? 0 };
 };
 
@@ -114,7 +113,7 @@ describe("Jevboard Worker (simulated payments, mock Jev)", () => {
     expect(verdict.score).toBeLessThanOrEqual(1000);
     expect(verdict.rolls).toBe(1);
 
-    // On the home page: a board row (<li>) linking to the verdict and showing the score.
+    // On the home page: a board row (<li>) linking to the verdict and to the site. No score on the row.
     const board = await browser.get("/");
     const rows = board.html
       .split("<li")
@@ -122,7 +121,8 @@ describe("Jevboard Worker (simulated payments, mock Jev)", () => {
       .map((chunk) => textOf(chunk.split("</li>")[0] ?? ""))
       .filter((row) => row.includes(`href="/s/${SITE}"`));
     expect(rows.length, "board rows linking to the verdict").toBeGreaterThan(0);
-    expect(rows.some((row) => row.includes(`>${verdict.score}<`))).toBe(true);
+    expect(rows.some((row) => row.includes(`href="/go/${SITE}"`))).toBe(true);
+    expect(rows.some((row) => row.includes(`>${verdict.score}<`))).toBe(false);
   });
 
   it("only the submitter sees the Rejudge button on their business", async () => {

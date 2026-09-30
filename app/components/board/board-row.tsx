@@ -145,10 +145,7 @@ export function BoardRow({
             </Link>
           </p>
         </div>
-        <div className="flex items-center gap-0.5 sm:gap-1.5">
-          <span className={`font-display text-xl font-bold tabular-nums sm:text-[22px] ${medal ? "text-accent" : "text-ink"}`}>
-            {entry.score}
-          </span>
+        <div className="flex items-center">
           <Link
             to={open ? closeHref : entryPath(entry.siteKey)}
             preventScrollReset
