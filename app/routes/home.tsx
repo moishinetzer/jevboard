@@ -10,7 +10,7 @@ export const loader = effectLoader("home", () => loadBoard(null));
 export const shouldRevalidate: ShouldRevalidateFunction = ({ formAction, defaultShouldRevalidate }) =>
   formAction === "/judge" ? false : defaultShouldRevalidate;
 
-const TITLE = "Jevboard: think you're #1? Prove it for $5.";
+const TITLE = "Ranked by Jev: think you're #1? Prove it for $5.";
 const DESCRIPTION =
   "No bidding, no ads, no buying your way up. Jev, an AI judge, reads your site and ranks how useful your business really is.";
 
@@ -22,13 +22,13 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
   return [
     { title: TITLE },
     { name: "description", content: description },
-    { property: "og:site_name", content: "Jevboard" },
+    { property: "og:site_name", content: "Ranked by Jev" },
     { property: "og:type", content: "website" },
     { property: "og:title", content: TITLE },
     { property: "og:description", content: description },
     { property: "og:url", content: `${origin}/` },
     { property: "og:image", content: image },
-    { property: "og:image:alt", content: "Jevboard: think you're #1? Prove it for $5." },
+    { property: "og:image:alt", content: "Ranked by Jev: think you're #1? Prove it for $5." },
     { name: "twitter:card", content: "summary_large_image" },
     { name: "twitter:title", content: TITLE },
     { name: "twitter:description", content: description },

@@ -106,10 +106,10 @@ describe("buildBadge", () => {
   it("renders the default shields-style badge", () => {
     const svg = buildBadge(entry);
     expect(svg.startsWith('<svg xmlns="http://www.w3.org/2000/svg"')).toBe(true);
-    expect(svg).toContain(">jevboard</text>");
+    expect(svg).toContain(">rankedbyjev</text>");
     expect(svg).toContain(">#14 · 812</text>");
     expect(svg).toContain('role="img"');
-    expect(svg).toContain("<title>stripe.com is #14 of 931 on jevboard, with a score of 812</title>");
+    expect(svg).toContain("<title>stripe.com is #14 of 931 on Ranked by Jev, with a score of 812</title>");
     // Accent value segment on the light theme.
     expect(svg).toContain('fill="#b45309"');
     assertBalanced(svg);
@@ -130,7 +130,7 @@ describe("buildBadge", () => {
     const long = size(buildBadge({ ...entry, score: 1000, rank: 12345 }));
     expect(long.width).toBeGreaterThan(short.width);
     // Label + value text plus padding always fit inside the badge.
-    const minimum = textWidth("jevboard", 11, true) + textWidth("#12345 · 1000", 11, true);
+    const minimum = textWidth("rankedbyjev", 11, true) + textWidth("#12345 · 1000", 11, true);
     expect(long.width).toBeGreaterThan(minimum);
   });
 
@@ -146,7 +146,7 @@ describe("buildBadge", () => {
   it("has a compact variant that is narrower than the default", () => {
     const compact = buildBadge(entry, { style: "compact" });
     expect(compact).toContain(">#14 · 812</text>");
-    expect(compact).not.toContain(">jevboard</text>");
+    expect(compact).not.toContain(">rankedbyjev</text>");
     expect(size(compact).width).toBeLessThan(size(buildBadge(entry)).width);
     assertBalanced(compact);
   });
@@ -157,7 +157,7 @@ describe("buildBadge", () => {
     expect(big).toContain(">812</text>");
     expect(big).toContain(">#14 on the board</text>");
     expect(big).toContain(">stripe.com</text>");
-    expect(big).toContain(">jevboard</text>");
+    expect(big).toContain(">rankedbyjev</text>");
     // No crown outside the top three.
     expect(big).not.toContain("M2 16 L4 4");
     assertBalanced(big);
@@ -202,7 +202,7 @@ describe("buildNotJudgedBadge", () => {
       const svg = buildNotJudgedBadge("acme.com", { style });
       expect(svg).toContain('fill="#6b6658"');
       expect(svg).not.toContain('fill="#b45309"');
-      expect(svg).toContain("acme.com is not on jevboard yet");
+      expect(svg).toContain("acme.com is not on Ranked by Jev yet");
       assertBalanced(svg);
     }
     expect(buildNotJudgedBadge("acme.com")).toContain(">not ranked yet</text>");

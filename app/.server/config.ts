@@ -13,7 +13,7 @@ export type Effort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | 
 export interface AppConfigShape {
   readonly env: "development" | "production" | "test";
   readonly databasePath: string;
-  /** Canonical public origin, e.g. https://jevboard.com (no trailing slash). */
+  /** Canonical public origin, e.g. https://rankedbyjev.com (no trailing slash). */
   readonly publicUrl: Option.Option<string>;
   /** All inference goes through OpenRouter (https://openrouter.ai). */
   readonly openrouter: Option.Option<{
@@ -72,7 +72,7 @@ const config = Effect.gen(function* () {
   const allowMockJudge = yield* Config.Boolean("JEV_ALLOW_MOCK_JUDGE").pipe(Config.withDefault(false));
   const workers = yield* Config.Int("JEV_WORKERS").pipe(Config.withDefault(2));
   const crawlUserAgent = yield* Config.String("JEV_USER_AGENT").pipe(
-    Config.withDefault("Mozilla/5.0 (compatible; JevBot/1.0; +https://jevboard.com/faq#jevbot)"),
+    Config.withDefault("Mozilla/5.0 (compatible; JevBot/1.0; +https://rankedbyjev.com/faq#jevbot)"),
   );
 
   if (env === "production") {

@@ -22,17 +22,17 @@ export const shouldRevalidate: ShouldRevalidateFunction = ({ formAction, default
 
 export const meta: Route.MetaFunction = ({ loaderData }) => {
   const entry = loaderData?.open?.entry;
-  if (!loaderData || !entry) return [{ title: "Not on the board: Jevboard" }, { name: "robots", content: "noindex" }];
+  if (!loaderData || !entry) return [{ title: "Not on the board | Ranked by Jev" }, { name: "robots", content: "noindex" }];
   const { origin } = loaderData;
   const url = `${origin}${entryPath(entry.siteKey)}`;
   const image = `${origin}${ogPath(entry.siteKey)}`;
-  const title = `${entry.name}: #${entry.rank} on Jevboard`;
+  const title = `${entry.name}: #${entry.rank} on Ranked by Jev`;
   const description = entry.tldr;
   return [
     { title },
     { name: "description", content: description },
     { tagName: "link", rel: "canonical", href: url },
-    { property: "og:site_name", content: "Jevboard" },
+    { property: "og:site_name", content: "Ranked by Jev" },
     { property: "og:type", content: "article" },
     { property: "og:url", content: url },
     { property: "og:title", content: title },
@@ -40,7 +40,7 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
     { property: "og:image", content: image },
     { property: "og:image:width", content: "1200" },
     { property: "og:image:height", content: "630" },
-    { property: "og:image:alt", content: `${entry.name} is #${entry.rank} on Jevboard with ${entry.score}` },
+    { property: "og:image:alt", content: `${entry.name} is #${entry.rank} on Ranked by Jev with ${entry.score}` },
     { name: "twitter:card", content: "summary_large_image" },
     { name: "twitter:title", content: title },
     { name: "twitter:description", content: description },

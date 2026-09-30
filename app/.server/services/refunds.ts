@@ -29,7 +29,7 @@ export const makeRefunder = (orders: Orders["Service"], payments: Payments["Serv
     const attempts = yield* orders.noteRefundAttempt(orderId);
 
     const outcome = yield* payments
-      .refund({ orderId, reason: `Jevboard could not judge ${order.siteKey}: ${order.error ?? "no verdict"}` })
+      .refund({ orderId, reason: `Ranked by Jev could not judge ${order.siteKey}: ${order.error ?? "no verdict"}` })
       .pipe(
         Effect.tapError((error: PaymentError) =>
           attempts >= STUCK_REFUND_ATTEMPTS

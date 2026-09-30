@@ -203,7 +203,7 @@ export const makeOpenRouterJudge = (http: HttpClient.HttpClient, settings: OpenR
     HttpClient.mapRequest(
       flow(
         HttpClientRequest.bearerToken(settings.apiKey),
-        HttpClientRequest.setHeader("X-Title", "Jevboard"),
+        HttpClientRequest.setHeader("X-Title", "Ranked by Jev"),
         settings.referer ? HttpClientRequest.setHeader("HTTP-Referer", settings.referer) : (request) => request,
         HttpClientRequest.acceptJson,
       ),

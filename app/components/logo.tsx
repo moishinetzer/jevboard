@@ -35,7 +35,7 @@ export function JevFace({
 }
 
 export function Wordmark({ className }: { className?: string }) {
-  return <span className={`font-display font-bold tracking-[-0.02em] leading-none ${className ?? ""}`}>jevboard</span>;
+  return <span className={`font-display font-bold tracking-[-0.02em] leading-none ${className ?? ""}`}>rankedbyjev</span>;
 }
 
 export type Medal = "gold" | "silver" | "bronze";

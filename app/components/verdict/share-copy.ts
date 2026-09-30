@@ -21,13 +21,17 @@ export interface ShareMessage {
 }
 
 const defendantBody = (f: ShareFacts): string => {
-  if (f.rank === 1) return `Jev ranks ${f.siteKey} #1 on Jevboard. Think you're more useful? Prove it for $5:`;
-  if (f.rank <= 10) return `Jev ranks ${f.siteKey} #${f.rank} on Jevboard. Come at us:`;
-  return `Paid $5 to have an AI judge how useful my business is. #${f.rank} of ${f.total} on Jevboard. Worth it.`;
+  if (f.rank === 1) {
+    return `${f.siteKey} is #1 on Ranked by Jev, where an AI judges how useful your business really is. Think you can beat us? Prove it for $5:`;
+  }
+  if (f.rank <= 10) return `An AI judge put ${f.siteKey} at #${f.rank} on Ranked by Jev. Come at us:`;
+  return `Paid $5 to have an AI judge how useful my business is. #${f.rank} of ${f.total} on Ranked by Jev. Worth it.`;
 };
 
 const spectatorBody = (f: ShareFacts): string =>
-  f.rank === 1 ? `${f.siteKey} is #1 on Jevboard. Agree?` : `Jev ranks ${f.siteKey} #${f.rank} of ${f.total} on Jevboard. Agree?`;
+  f.rank === 1
+    ? `${f.siteKey} is #1 on Ranked by Jev. The judge is an AI. Agree?`
+    : `An AI judge put ${f.siteKey} at #${f.rank} of ${f.total} on Ranked by Jev. Agree?`;
 
 export const shareMessage = (facts: ShareFacts, voice: ShareVoice): ShareMessage => {
   const body = voice === "defendant" ? defendantBody(facts) : spectatorBody(facts);

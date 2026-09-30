@@ -21,7 +21,7 @@ const svgResponse = (svg: string, maxAge: number) =>
 
 /**
  * GET /badge/<siteKey>.svg[?theme=light|dark][&style=default|compact|big]
- * Embeddable "jevboard | #14 · 812" badge. Unknown sites get a grey
+ * Embeddable "rankedbyjev | #14 · 812" badge. Unknown sites get a grey
  * "not ranked yet" badge (200, so embeds never show a broken image).
  */
 export const loader = effectLoader("badge", ({ params, request }: Route.LoaderArgs) =>

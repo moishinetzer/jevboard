@@ -44,6 +44,14 @@
     ]
   },
 
+  // rankedbyjev.com (registered with Cloudflare). workers.dev stays on for the
+  // payment webhook; its pages redirect to PUBLIC_URL (see workers/app.ts).
+  "routes": [
+    { "pattern": "rankedbyjev.com", "custom_domain": true },
+    { "pattern": "www.rankedbyjev.com", "custom_domain": true }
+  ],
+  "workers_dev": true,
+
   // Every minute: confirm payments for buyers who closed the tab, re-queue
   // stuck judgments, retry refunds that didn't go through.
   "triggers": { "crons": ["* * * * *"] },
@@ -70,6 +78,6 @@
     "AUTUMN_API_VERSION": "2.4.0",
     // Public origin for checkout return URLs and share links. Without it they use
     // the request's own origin.
-    "PUBLIC_URL": "https://jevboard.moishinetzer.workers.dev"
+    "PUBLIC_URL": "https://rankedbyjev.com"
   }
 }

@@ -47,7 +47,7 @@ export const CLAUSES: ReadonlyArray<Clause> = [
     gist: "Real, public websites you have the right to promote.",
     body: (
       <>
-        Only submit public websites you own or may promote. Don't use Jevboard to impersonate or harass anyone, or to promote anything
+        Only submit public websites you own or may promote. Don't use Ranked by Jev to impersonate or harass anyone, or to promote anything
         illegal, deceptive or harmful. Don't try to{" "}
         <Link to="/faq#trick-jev" className="link">
           manipulate the judge
@@ -72,7 +72,7 @@ export const CLAUSES: ReadonlyArray<Clause> = [
     id: "service",
     title: "The service",
     gist: "Provided as is. Jev has off days.",
-    body: "Jevboard is provided as is, without warranties. It may be unavailable, change or shut down, and future prices may change. As far as the law allows, our total liability is limited to what you paid us in the previous 30 days.",
+    body: "Ranked by Jev is provided as is, without warranties. It may be unavailable, change or shut down, and future prices may change. As far as the law allows, our total liability is limited to what you paid us in the previous 30 days.",
   },
   {
     id: "privacy",

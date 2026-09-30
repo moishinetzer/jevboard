@@ -29,17 +29,17 @@ export const links: Route.LinksFunction = () => [
 ];
 
 export const meta: Route.MetaFunction = () => [
-  { title: "Jevboard: how useful is your business?" },
+  { title: "Ranked by Jev: think you're #1? Prove it for $5." },
   {
     name: "description",
     content:
-      "No bidding, no ads, no buying your way up. Jev, an AI judge, reads your website and ranks how useful your business really is.",
+      "No bidding, no ads, no buying your way up. Jev, an AI judge, reads your site and ranks how useful your business really is.",
   },
-  { property: "og:site_name", content: "Jevboard" },
+  { property: "og:site_name", content: "Ranked by Jev" },
   { property: "og:type", content: "website" },
   { property: "og:image", content: "/og.png" },
   { name: "twitter:card", content: "summary_large_image" },
-  { name: "theme-color", content: "#ffd400" },
+  { name: "theme-color", content: "#fcfaf3" },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {

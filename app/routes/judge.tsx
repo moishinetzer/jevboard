@@ -15,7 +15,7 @@ export const action = effectAction("judge", ({ request }: Route.ActionArgs) =>
     // Only our own pages may start a checkout.
     const origin = request.headers.get("Origin");
     if (origin && origin !== new URL(request.url).origin && origin !== (yield* CurrentRequest).origin) {
-      return data({ ok: false, field: "url", message: "Submit from jevboard itself, please.", value: "" }, { status: 403 });
+      return data({ ok: false, field: "url", message: "Submit from rankedbyjev.com itself, please.", value: "" }, { status: 403 });
     }
     const form = yield* Effect.promise(() => request.formData());
     const url = String(form.get("url") ?? "");

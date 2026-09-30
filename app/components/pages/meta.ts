@@ -18,11 +18,11 @@ export const pageMeta = ({
   image?: string;
 }): Array<MetaDescriptor> => {
   const absolute = (href: string) => (origin ? `${origin}${href}` : href);
-  const fullTitle = `${title} — Jevboard`;
+  const fullTitle = `${title} | Ranked by Jev`;
   return [
     { title: fullTitle },
     { name: "description", content: description },
-    { property: "og:site_name", content: "Jevboard" },
+    { property: "og:site_name", content: "Ranked by Jev" },
     { property: "og:type", content: "website" },
     { property: "og:title", content: fullTitle },
     { property: "og:description", content: description },
@@ -34,7 +34,7 @@ export const pageMeta = ({
     { name: "twitter:title", content: fullTitle },
     { name: "twitter:description", content: description },
     { name: "twitter:image", content: absolute(image) },
-    { name: "theme-color", content: "#ffd400" },
+    { name: "theme-color", content: "#fcfaf3" },
     ...(origin ? [{ tagName: "link", rel: "canonical", href: absolute(path) } satisfies MetaDescriptor] : []),
   ];
 };

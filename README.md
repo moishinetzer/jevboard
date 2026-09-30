@@ -1,8 +1,9 @@
-# Jevboard
+# Ranked by Jev
 
-**Think you're #1? Prove it for $5.**
+**Think you're #1? Prove it for $5.** Live at [rankedbyjev.com](https://rankedbyjev.com). (The repo and
+Cloudflare resources keep the working name `jevboard`.)
 
-Jevboard is a public leaderboard of businesses ranked by _Jev_, an AI judge. No bidding, no ads, no buying
+Ranked by Jev is a public leaderboard of businesses ranked by _Jev_, an AI judge. No bidding, no ads, no buying
 your way up. You give it nothing but a URL: Jev reads the site, writes a TL;DR, roasts it a little and decides
 where the business ranks. Whoever added a business can pay $5 again for a rejudge, and the newest verdict
 stands, even when it's worse.

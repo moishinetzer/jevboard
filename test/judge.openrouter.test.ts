@@ -151,7 +151,7 @@ describe("OpenRouterJudge request", () => {
       const [call] = api.calls;
       assert.strictEqual(call!.url, OPENROUTER_CHAT_URL);
       assert.strictEqual(call!.headers["authorization"], `Bearer ${KEY}`);
-      assert.strictEqual(call!.headers["x-title"], "Jevboard");
+      assert.strictEqual(call!.headers["x-title"], "Ranked by Jev");
       assert.strictEqual(call!.headers["http-referer"], "https://jevboard.test");
 
       const body = call!.body;

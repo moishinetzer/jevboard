@@ -69,13 +69,13 @@ function Crown({ medal, width }: { medal: Medal; width: number }) {
   );
 }
 
-/** Jev's face + the lowercase "jevboard" wordmark. */
+/** Jev's face + the lowercase "rankedbyjev" wordmark. */
 function Brand() {
   return (
     <div style={row({ gap: 12 })}>
       <Face size={52} />
       <div style={{ display: "flex", fontFamily: OG_FONT.display, fontWeight: 700, fontSize: 36, lineHeight: 1, letterSpacing: em(36, -0.02) }}>
-        jevboard
+        rankedbyjev
       </div>
     </div>
   );

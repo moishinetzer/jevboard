@@ -27,12 +27,12 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
   const siteKey = loaderData?.order.siteKey;
   const status = loaderData?.order.status;
   const title = !siteKey
-    ? "Judging | Jevboard"
+    ? "Judging | Ranked by Jev"
     : status === "complete"
-      ? `${siteKey}: Jev has spoken | Jevboard`
+      ? `${siteKey}: Jev has spoken | Ranked by Jev`
       : status === "failed"
-        ? `${siteKey}: no verdict | Jevboard`
-        : `${siteKey}: Jev is judging | Jevboard`;
+        ? `${siteKey}: no verdict | Ranked by Jev`
+        : `${siteKey}: Jev is judging | Ranked by Jev`;
   return [{ title }, { name: "robots", content: "noindex, nofollow" }];
 };
 

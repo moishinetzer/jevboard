@@ -50,7 +50,7 @@ export const action = effectAction("dev-checkout", ({ params, request }: Route.A
   }),
 );
 
-export const meta: Route.MetaFunction = () => [{ title: "Simulated checkout | Jevboard" }, { name: "robots", content: "noindex" }];
+export const meta: Route.MetaFunction = () => [{ title: "Simulated checkout | Ranked by Jev" }, { name: "robots", content: "noindex" }];
 
 export default function DevCheckout({ loaderData }: Route.ComponentProps) {
   const navigation = useNavigation();

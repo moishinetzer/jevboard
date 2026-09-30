@@ -329,7 +329,7 @@ export function Verdict({ order, result, origin }: { order: OrderView; result: R
         src={ogPath(entry.siteKey)}
         width={600}
         height={315}
-        alt={`Share card: ${entry.name}, #${entry.rank} on Jevboard with ${judgment.score}`}
+        alt={`Share card: ${entry.name}, #${entry.rank} on Ranked by Jev with ${judgment.score}`}
         className="aspect-[1200/630] w-full max-w-[600px] rounded-2xl border border-line bg-paper shadow-[0_8px_24px_rgba(29,27,22,0.08)]"
       />
 

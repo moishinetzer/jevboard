@@ -9,7 +9,7 @@ const LIVE_PILL_MIN_VIEWS = 25;
 export function HomeHeader({ weekViews }: { weekViews: number }) {
   return (
     <header className="flex flex-col items-center gap-3 px-4 pt-7 sm:gap-3.5 sm:pt-10">
-      <Link to="/" aria-label="Jevboard home" className="flex items-center gap-2 text-ink">
+      <Link to="/" aria-label="Ranked by Jev home" className="flex items-center gap-2 text-ink">
         <JevFace size={34} label="" className="size-7 sm:size-[34px]" />
         <Wordmark className="text-[25px] sm:text-[30px]" />
       </Link>
@@ -33,7 +33,7 @@ export function HomeHeader({ weekViews }: { weekViews: number }) {
 export function PageHeader() {
   return (
     <header className="mx-auto flex w-full max-w-[780px] items-center justify-between gap-4 px-4 pt-7 sm:pt-9">
-      <Link to="/" aria-label="Jevboard home" className="flex items-center gap-2 text-ink">
+      <Link to="/" aria-label="Ranked by Jev home" className="flex items-center gap-2 text-ink">
         <JevFace size={30} label="" />
         <Wordmark className="text-[22px] sm:text-[26px]" />
       </Link>

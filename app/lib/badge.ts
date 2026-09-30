@@ -1,5 +1,5 @@
 /**
- * Embeddable jevboard badges ("jevboard | #3 · 783", shields.io style), built
+ * Embeddable Ranked by Jev badges ("rankedbyjev | #3 · 783", shields.io style), built
  * as plain SVG strings.
  *
  * Pure and dependency-free so it runs anywhere (resource route, tests, scripts).
@@ -321,7 +321,7 @@ const card = (options: {
   const body = [
     `<rect x="0.75" y="0.75" width="${width - 1.5}" height="${height - 1.5}" rx="10" fill="${palette.paper}" stroke="${palette.line}" stroke-width="1.5"/>`,
     jevFace(inset - 2, 12, 22),
-    text("jevboard", { x: inset + 25, y: 28, size: 14, fill: palette.ink, family: FONT_DISPLAY, weight: "bold", length: textWidth("jevboard", 14, true) }),
+    text("rankedbyjev", { x: inset + 25, y: 28, size: 14, fill: palette.ink, family: FONT_DISPLAY, weight: "bold", length: textWidth("rankedbyjev", 14, true) }),
     `<rect x="${chipX + 0.5}" y="${chipY + 0.5}" width="${chipW - 1}" height="${chipH - 1}" rx="${chipH / 2}" fill="${tint.bg}" stroke="${tint.line}"/>`,
     options.medal ? crown(chipX + 10, chipY + 6, crownWidth, options.medal) : "",
     text(options.chip, {
@@ -352,10 +352,10 @@ const card = (options: {
 // Public builders
 // ---------------------------------------------------------------------------
 
-/** Badge for a ranked site: "jevboard | #14 · 812". */
+/** Badge for a ranked site: "rankedbyjev | #14 · 812". */
 export const buildBadge = (entry: BadgeEntry, options: BadgeOptions = {}): string => {
   const palette = PALETTES[options.theme ?? "light"];
-  const title = `${entry.siteKey} is #${entry.rank} of ${entry.total} on jevboard, with a score of ${entry.score}`;
+  const title = `${entry.siteKey} is #${entry.rank} of ${entry.total} on Ranked by Jev, with a score of ${entry.score}`;
   const value = `#${entry.rank} · ${entry.score}`;
   const shared = { valueBg: palette.accent, valueInk: palette.onAccent, palette, title, href: options.href };
 
@@ -375,14 +375,14 @@ export const buildBadge = (entry: BadgeEntry, options: BadgeOptions = {}): strin
         caption: "Ranked by Jev",
       });
     default:
-      return pill({ ...shared, label: "jevboard", value, height: 20 });
+      return pill({ ...shared, label: "rankedbyjev", value, height: 20 });
   }
 };
 
 /** Muted badge for a site Jev hasn't ranked (yet). Served with 200 so embeds never break. */
 export const buildNotJudgedBadge = (siteKey: string, options: BadgeOptions = {}): string => {
   const palette = PALETTES[options.theme ?? "light"];
-  const title = `${siteKey || "This site"} is not on jevboard yet`;
+  const title = `${siteKey || "This site"} is not on Ranked by Jev yet`;
   const shared = { valueBg: palette.line, valueInk: palette.soft, palette, title, href: options.href };
 
   switch (options.style ?? "default") {
@@ -401,6 +401,6 @@ export const buildNotJudgedBadge = (siteKey: string, options: BadgeOptions = {})
         caption: "Get ranked by Jev for $5.",
       });
     default:
-      return pill({ ...shared, label: "jevboard", value: "not ranked yet", height: 20 });
+      return pill({ ...shared, label: "rankedbyjev", value: "not ranked yet", height: 20 });
   }
 };

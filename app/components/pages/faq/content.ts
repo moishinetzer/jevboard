@@ -5,7 +5,13 @@
 import { formatMoney, JUDGMENT_PRICE_CENTS } from "~/lib/format";
 
 /** Contact address, used by the FAQ, JevBot and the terms. The FAQ links it wherever an answer mentions it. */
-export const CONTACT_EMAIL = "hello@jevboard.com";
+export const CONTACT_EMAIL = "hello@rankedbyjev.com";
+
+/** Stands in for the configured model id in answers; `withModel` fills it in. */
+const MODEL_TOKEN = "{model}";
+
+/** An answer with the live model id in place of the token. */
+export const withModel = (answer: string, model: string): string => answer.replaceAll(MODEL_TOKEN, model);
 
 const price = formatMoney(JUDGMENT_PRICE_CENTS);
 
@@ -22,6 +28,11 @@ export const FAQ: ReadonlyArray<FaqItem> = [
     question: "Who is Jev?",
     answer:
       "An AI judge with opinions and no friends in the industry. Jev reads your website the way a busy stranger would, writes the TL;DR you should have written and decides where your business ranks. Then everyone gets to see it.",
+  },
+  {
+    id: "under-the-hood",
+    question: "What's actually under the hood?",
+    answer: `A large language model with a crawler, a browser and a very specific brief. Right now that's ${MODEL_TOKEN}, called through OpenRouter with structured outputs. Every site gets the same model and the same prompt, and Jev never knows who paid. Sites that only render with JavaScript are opened in a headless browser first, so single-page apps get a fair read.`,
   },
   {
     id: "what-to-tell-jev",
@@ -79,12 +90,12 @@ export const FAQ: ReadonlyArray<FaqItem> = [
 ];
 
 /** schema.org FAQPage for rich results. */
-export const faqJsonLd = () => ({
+export const faqJsonLd = (model: string) => ({
   "@context": "https://schema.org",
   "@type": "FAQPage",
   mainEntity: FAQ.map((item) => ({
     "@type": "Question",
     name: item.question,
-    acceptedAnswer: { "@type": "Answer", text: item.answer },
+    acceptedAnswer: { "@type": "Answer", text: withModel(item.answer, model) },
   })),
 });

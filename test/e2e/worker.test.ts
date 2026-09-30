@@ -67,7 +67,7 @@ const waitForVerdict = (browser: Browser, orderId: string) =>
  * title, the details section rendered with its score, and its roll count from D1.
  */
 const verdictOf = async (page: Visit, site: string) => {
-  const rank = /: #(\d+) on Jevboard$/.exec(titleOf(page.html));
+  const rank = /: #(\d+) on Ranked by Jev$/.exec(titleOf(page.html));
   expect(rank, `verdict page title: ${titleOf(page.html)}`).not.toBeNull();
   expect(page.html).toContain('aria-expanded="true"');
   expect(textOf(page.html)).toContain(`Why Jev put it at #${rank?.[1]}`);
