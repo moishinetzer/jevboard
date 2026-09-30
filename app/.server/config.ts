@@ -18,7 +18,7 @@ export interface AppConfigShape {
   /** All inference goes through OpenRouter (https://openrouter.ai). */
   readonly openrouter: Option.Option<{
     readonly apiKey: Redacted.Redacted<string>;
-    /** OpenRouter model id, e.g. "google/gemini-3.1-flash-lite". */
+    /** OpenRouter model id, e.g. "openai/gpt-6-luna". */
     readonly model: string;
     readonly judgeEffort: Effort;
     readonly duelEffort: Effort;
@@ -42,7 +42,7 @@ export interface AppConfigShape {
 }
 
 /** Jev's default model; pick another OpenRouter id with JEV_MODEL. */
-export const DEFAULT_MODEL = "google/gemini-3.1-flash-lite";
+export const DEFAULT_MODEL = "openai/gpt-6-luna";
 
 const Effort = (name: string, fallback: Effort) =>
   Config.Literals(["none", "minimal", "low", "medium", "high", "xhigh", "max"], name).pipe(

@@ -12,7 +12,7 @@ export interface JudgeInput {
 
 export interface JudgeResult {
   readonly verdict: Verdict;
-  /** Model id that produced the verdict (e.g. "google/gemini-3.1-flash-lite" or "mock-jev"). */
+  /** Model id that produced the verdict (e.g. "openai/gpt-6-luna" or "mock-jev"). */
   readonly model: string;
 }
 

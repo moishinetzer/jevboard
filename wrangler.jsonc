@@ -18,7 +18,7 @@
   ],
 
   // Paid judgments run as queue jobs:
-  //  - jevboard-judgments: crawl + Claude verdict, many in parallel
+  //  - jevboard-judgments: crawl + Jev's verdict (one OpenRouter call), many in parallel
   //  - jevboard-placements: tiebreak duels + ranking, strictly one at a time so
   //    concurrent verdicts never interleave inside a tie group
   "queues": {
@@ -54,11 +54,12 @@
     { "name": "IP_LIMITER", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } }
   ],
 
-  // Non-secret config. Secrets: `wrangler secret put ANTHROPIC_API_KEY` /
+  // Non-secret config. Secrets: `wrangler secret put OPENROUTER_API_KEY` /
   // AUTUMN_SECRET_KEY / AUTUMN_WEBHOOK_SECRET (use .dev.vars locally).
+  // JEV_MODEL is any OpenRouter model id that supports structured outputs.
   "vars": {
-    "JEV_MODEL": "claude-opus-5-5",
-    "JEV_JUDGE_EFFORT": "medium",
+    "JEV_MODEL": "openai/gpt-6-luna",
+    "JEV_JUDGE_EFFORT": "low",
     "JEV_DUEL_EFFORT": "low",
     "AUTUMN_PLAN_ID": "judgment",
     "AUTUMN_FEATURE_ID": "judgment",
