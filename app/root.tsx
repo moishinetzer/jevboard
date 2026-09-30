@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   isRouteErrorResponse,
   Link,
@@ -13,6 +14,7 @@ import { effectLoader } from "./.server/http";
 import { loadShell } from "./.server/flows/shell";
 import { visitorMiddleware } from "./.server/visitor";
 import { JevFace } from "./components/logo";
+import { reportError, useAnalytics } from "./components/analytics";
 import { ModeBanner, PageHeader, SiteFooter } from "./components/shell";
 import "./app.css";
 
@@ -61,6 +63,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App({ loaderData }: Route.ComponentProps) {
+  useAnalytics(loaderData.analytics);
   return (
     <>
       <ModeBanner mode={loaderData.mode} />
@@ -90,6 +93,9 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     details = error.message;
     stack = error.stack;
   }
+  useEffect(() => {
+    if (!isRouteErrorResponse(error) || error.status >= 500) reportError(error);
+  }, [error]);
 
   return (
     <>

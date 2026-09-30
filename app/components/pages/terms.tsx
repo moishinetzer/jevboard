@@ -76,9 +76,9 @@ export const CLAUSES: ReadonlyArray<Clause> = [
   },
   {
     id: "privacy",
-    title: "Cookies and payments",
-    gist: "One anonymous cookie. We never see your card.",
-    body: "One anonymous cookie counts visitors and links your purchases to your browser. There are no accounts. Payments are handled by our payment provider; we never see or store your card details.",
+    title: "Cookies, analytics and payments",
+    gist: "Anonymous analytics. We never see your card.",
+    body: "An anonymous cookie links your purchases to your browser; there are no accounts. We use PostHog, hosted in the EU, to count visits, record anonymised session replays (anything you type is masked) and catch errors, so we can see what works and fix what breaks. Payments are handled by our payment provider; we never see or store your card details.",
   },
 ];
 

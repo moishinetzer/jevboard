@@ -10,6 +10,7 @@ import { JudgmentQueue } from "../services/JudgmentQueue";
 import { Orders } from "../services/Orders";
 import { Payments } from "../services/Payments";
 import { RateLimiter } from "../services/RateLimiter";
+import { track } from "../services/Analytics";
 
 /** What the submit form renders when a submission can't proceed. */
 export interface SubmitFailure {
@@ -61,12 +62,14 @@ export const submitSite = Effect.fn("submitSite")(function* (rawUrl: string) {
   }
   const normalized = normalizeSite(rawUrl);
   if (!normalized.ok) {
+    yield* track("judgment_rejected", { reason: normalized.error });
     return { ok: false, field: "url", message: normalizeErrorMessage[normalized.error], value: rawUrl } satisfies SubmitFailure;
   }
   const site = normalized.site;
 
   const preflight = yield* Effect.result((yield* Crawler).preflight(site.url));
   if (Result.isFailure(preflight)) {
+    yield* track("judgment_rejected", { reason: `unreachable:${preflight.failure.reason}`, site: site.siteKey });
     return { ok: false, field: "url", message: preflightMessage(preflight.failure), value: rawUrl } satisfies SubmitFailure;
   }
 
@@ -100,12 +103,15 @@ export const submitSite = Effect.fn("submitSite")(function* (rawUrl: string) {
     } satisfies SubmitFailure;
   }
 
+  yield* track("checkout_started", { order_id: order.id, site: site.siteKey, kind: order.kind });
+
   if (checkout.success._tag === "AlreadyPaid") {
     // An unused credit from an earlier purchase covers this judgment.
     const paid = yield* payments.confirm({ orderId: order.id, customerId: request.visitorId }).pipe(
       Effect.catchTag("PaymentError", () => Effect.succeed("unpaid" as const)),
     );
     if (paid === "paid" && (yield* orders.markPaid(order.id))) {
+      yield* track("payment_confirmed", { order_id: order.id, site: site.siteKey, kind: order.kind, via: "credit" });
       yield* (yield* JudgmentQueue).enqueue(order.id);
     }
     return redirect(`/judging/${order.id}`);

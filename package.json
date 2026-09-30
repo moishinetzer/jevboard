@@ -25,6 +25,7 @@
     "effect": "4.0.0-rc.118",
     "isbot": "^5.2.2",
     "node-html-parser": "^9.0.4",
+    "posthog-js": "^1.435.3",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-router": "8.4.0"

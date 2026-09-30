@@ -39,6 +39,15 @@ export interface AppConfigShape {
   /** Number of concurrent judgment workers. */
   readonly workers: number;
   readonly crawlUserAgent: string;
+  /**
+   * PostHog (analytics, session replay, error tracking, tracing). The project
+   * token is write-only and public by design: browsers get it too.
+   */
+  readonly posthog: Option.Option<{
+    readonly token: string;
+    /** Ingestion host, e.g. https://eu.i.posthog.com */
+    readonly host: string;
+  }>;
 }
 
 /** Jev's default model; pick another OpenRouter id with JEV_MODEL. */
@@ -71,6 +80,8 @@ const config = Effect.gen(function* () {
   const allowFakePayments = yield* Config.Boolean("JEV_ALLOW_FAKE_PAYMENTS").pipe(Config.withDefault(false));
   const allowMockJudge = yield* Config.Boolean("JEV_ALLOW_MOCK_JUDGE").pipe(Config.withDefault(false));
   const workers = yield* Config.Int("JEV_WORKERS").pipe(Config.withDefault(2));
+  const posthogToken = yield* Config.option(Config.String("POSTHOG_TOKEN"));
+  const posthogHost = yield* Config.String("POSTHOG_HOST").pipe(Config.withDefault("https://eu.i.posthog.com"));
   const crawlUserAgent = yield* Config.String("JEV_USER_AGENT").pipe(
     Config.withDefault("Mozilla/5.0 (compatible; JevBot/1.0; +https://rankedbyjev.com/faq#jevbot)"),
   );
@@ -103,6 +114,10 @@ const config = Effect.gen(function* () {
     })),
     workers: Math.max(1, Math.min(workers, 8)),
     crawlUserAgent,
+    posthog: Option.map(
+      Option.filter(posthogToken, (token) => token.trim() !== ""),
+      (token) => ({ token: token.trim(), host: posthogHost.replace(/\/+$/, "") }),
+    ),
   } satisfies AppConfigShape;
 });
 
@@ -121,6 +136,7 @@ export class AppConfig extends Context.Service<AppConfig, AppConfigShape>()("jev
         autumn: Option.none(),
         workers: 1,
         crawlUserAgent: "JevBot/test",
+        posthog: Option.none(),
         ...overrides,
       }),
     );

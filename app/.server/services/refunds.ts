@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import type { PaymentError } from "../domain/errors";
 import type { OrderId } from "../domain/ids";
 import type { RefundState } from "../domain/models";
+import { track } from "./Analytics";
 import type { Orders } from "./Orders";
 import type { Payments } from "./Payments";
 
@@ -47,6 +48,7 @@ export const makeRefunder = (orders: Orders["Service"], payments: Payments["Serv
     }
     yield* orders.markRefunded(orderId);
     yield* Effect.logInfo("Order refunded", { orderId, outcome, attempts });
+    yield* track("refund_issued", { order_id: orderId, site: order.siteKey, outcome, attempts }, { distinctId: order.customerId });
     return "done" satisfies RefundState;
   });
 

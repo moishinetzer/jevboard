@@ -9,6 +9,8 @@ import {
   SqlBatchD1,
 } from "./cloudflare/layers";
 import { AppConfig } from "./config";
+import { TracingLive } from "./observability";
+import { Analytics } from "./services/Analytics";
 import { Board } from "./services/Board";
 import { CrawlerCloudflare } from "./cloudflare/crawler";
 import { JudgeLive } from "./services/judge/JudgeLive";
@@ -25,6 +27,7 @@ import { Views } from "./services/Views";
  *               ├─ Judge (OpenRouter | mock) ──────────────────────────────────┘
  *               ├─ Payments (Autumn | simulator)
  *               ├─ JudgmentQueue (Cloudflare Queues) · RateLimiter (Rate Limiting bindings)
+ *               ├─ Analytics + Tracing (PostHog: events, OTLP spans)
  *               └─ AppConfig (vars + secrets)
  *
  * Loaders, actions, queue consumers and the cron trigger all run on the same
@@ -39,6 +42,7 @@ const Services = Layer.mergeAll(
   CrawlerCloudflare,
   JudgeLive,
   PaymentsLive,
+  Analytics.layer,
   RateLimiterCloudflare,
   Views.layer,
 ).pipe(Layer.provideMerge(Database));
@@ -53,6 +57,7 @@ const LoggerLive = Layer.unwrap(
 );
 
 export const AppLayer = Jobs.pipe(
+  Layer.provideMerge(TracingLive),
   Layer.provideMerge(LoggerLive),
   Layer.provideMerge(AppConfig.layer),
   Layer.provideMerge(Layer.succeed(CloudflareEnv, env)),

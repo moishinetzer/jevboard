@@ -4,6 +4,7 @@ import type { OrderId } from "../domain/ids";
 import { Orders } from "./Orders";
 import { Payments } from "./Payments";
 import { Pipeline } from "./Pipeline";
+import { track } from "./Analytics";
 
 /**
  * Where paid judgments go to be processed.
@@ -30,7 +31,10 @@ export class JudgmentQueue extends Context.Service<JudgmentQueue, JudgmentQueueS
       const payments = yield* Payments;
       return Effect.fn("JudgmentQueue.settle")(function* (orderId: OrderId, customerId: string) {
         const paid = yield* payments.confirm({ orderId, customerId });
-        if (paid === "paid" && (yield* orders.markPaid(orderId))) yield* enqueue(orderId);
+        if (paid === "paid" && (yield* orders.markPaid(orderId))) {
+          yield* track("payment_confirmed", { order_id: orderId, via: "webhook_or_sweeper" }, { distinctId: customerId });
+          yield* enqueue(orderId);
+        }
       });
     });
 

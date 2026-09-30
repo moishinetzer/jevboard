@@ -1,9 +1,10 @@
-import { Effect, flow, Layer, Option, Redacted, Result, Schedule, Schema } from "effect";
+import { Cause, Clock, Effect, Exit, flow, Layer, Option, Redacted, Result, Schedule, Schema } from "effect";
 import { toCodecOpenAI } from "effect/ai/OpenAiStructuredOutput";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { AppConfig, type Effort } from "../../config";
 import { JudgeError } from "../../domain/errors";
 import { CATEGORIES, DuelVerdict, Verdict } from "../../domain/models";
+import { AnalyticsActor, track } from "../Analytics";
 import { type DuelInput, Judge, type JudgeInput, type JudgeResult } from "../Judge";
 import { buildDuelUserMessage, buildJudgeUserMessage, DUEL_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT } from "./prompts";
 import { evidenceCorpus, verifyReceipts } from "./receipts";
@@ -241,20 +242,53 @@ export const makeOpenRouterJudge = (http: HttpClient.HttpClient, settings: OpenR
         error.retryable ? Effect.logDebug("OpenRouter call failed, may retry", { call: label, message: error.message }) : Effect.void,
       ),
     );
-    return attempt.pipe(
-      Effect.retry({ schedule: retrySchedule, while: (error) => error.reason === "api" && error.retryable }),
-      Effect.tap((response) =>
-        Effect.logInfo("Jev usage", {
-          call: label,
-          model: response.model,
-          finishReason: response.choices?.[0]?.finish_reason,
-          promptTokens: response.usage?.prompt_tokens,
-          completionTokens: response.usage?.completion_tokens,
-          costUsd: response.usage?.cost,
-        }),
-      ),
-    );
+    return Effect.gen(function* () {
+      const started = yield* Clock.currentTimeMillis;
+      const exit = yield* Effect.exit(
+        attempt.pipe(
+          Effect.retry({ schedule: retrySchedule, while: (error) => error.reason === "api" && error.retryable }),
+          Effect.tap((response) =>
+            Effect.logInfo("Jev usage", {
+              call: label,
+              model: response.model,
+              finishReason: response.choices?.[0]?.finish_reason,
+              promptTokens: response.usage?.prompt_tokens,
+              completionTokens: response.usage?.completion_tokens,
+              costUsd: response.usage?.cost,
+            }),
+          ),
+        ),
+      );
+      yield* recordGeneration(label, body, exit, (yield* Clock.currentTimeMillis) - started);
+      return yield* exit;
+    });
   };
+
+  /**
+   * One `$ai_generation` for PostHog LLM analytics: model, tokens, cost,
+   * latency and errors. Prompts and answers are left out.
+   */
+  const recordGeneration = (label: string, body: ChatRequest, exit: Exit.Exit<ChatResponse, JudgeError>, latencyMs: number) =>
+    Effect.gen(function* () {
+      const actor = yield* AnalyticsActor;
+      const span = yield* Effect.option(Effect.currentSpan);
+      const response = Exit.isSuccess(exit) ? exit.value : undefined;
+      const failure = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
+      yield* track("$ai_generation", {
+        $ai_trace_id: actor.traceId ?? Option.getOrUndefined(Option.map(span, (s) => s.traceId)),
+        $ai_span_name: label,
+        $ai_provider: "openrouter",
+        $ai_model: response?.model ?? body.model,
+        $ai_base_url: OPENROUTER_CHAT_URL.replace(/\/chat\/completions$/, ""),
+        $ai_input_tokens: response?.usage?.prompt_tokens,
+        $ai_output_tokens: response?.usage?.completion_tokens,
+        $ai_total_cost_usd: response?.usage?.cost,
+        $ai_latency: latencyMs / 1000,
+        $ai_http_status: response ? 200 : undefined,
+        $ai_is_error: failure !== undefined,
+        ...(failure ? { $ai_error: failure instanceof Error ? failure.message : String(failure) } : {}),
+      });
+    });
 
   /** Reads the structured answer out of a completion and decodes it with the given codec. */
   const decodeAnswer = <A>(

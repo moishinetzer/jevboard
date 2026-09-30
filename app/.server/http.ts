@@ -3,6 +3,7 @@ import type { RouterContextProvider } from "react-router";
 import { AppConfig } from "./config";
 import { toRouteOutcome } from "./route-errors";
 import { type AppServices, runtime } from "./runtime";
+import { AnalyticsActor } from "./services/Analytics";
 import { visitorContext } from "./visitor";
 
 /**
@@ -81,10 +82,27 @@ const provideRequest = <A, E>(effect: Effect.Effect<A, E, RouteServices>, args: 
     );
   });
 
+/** The browser SDK sends its session id on same-site requests (`tracing_headers`). */
+const sessionIdOf = (request: Request): string | null => {
+  const id = request.headers.get("x-posthog-session-id")?.trim();
+  return id && /^[\w-]{1,100}$/.test(id) ? id : null;
+};
+
 const run = async <A, E>(name: string, effect: Effect.Effect<A, E, RouteServices>, args: RouteArgs): Promise<A> => {
+  const visitorId = args.context.get(visitorContext)?.id ?? null;
+  const sessionId = sessionIdOf(args.request);
   const exit = await runtime.runPromiseExit(
     provideRequest(effect, args).pipe(
-      Effect.withSpan(name, { attributes: { "http.method": args.request.method, "http.url": args.request.url } }),
+      Effect.provideService(AnalyticsActor, { distinctId: visitorId, sessionId }),
+      // posthogDistinctId / sessionId link the trace to the person and their session replay.
+      Effect.withSpan(name, {
+        attributes: {
+          "http.method": args.request.method,
+          "http.url": args.request.url,
+          ...(visitorId ? { posthogDistinctId: visitorId } : {}),
+          ...(sessionId ? { sessionId } : {}),
+        },
+      }),
     ),
     { signal: args.request.signal },
   );

@@ -5,6 +5,7 @@ import { type DuelContender, TERMINAL_STATUSES, type Verdict } from "../domain/m
 import { Board, type DuelRecord, type PlacementResult } from "./Board";
 import { Crawler } from "./Crawler";
 import { Judge } from "./Judge";
+import { AnalyticsActor, track } from "./Analytics";
 import { Orders } from "./Orders";
 import { Payments } from "./Payments";
 import { makeRefunder } from "./refunds";
@@ -129,13 +130,27 @@ export class Pipeline extends Context.Service<
         orders.fail(orderId, message, token).pipe(
           Effect.flatMap((failed) =>
             failed
-              ? refund(orderId).pipe(
-                  Effect.catchTag("PaymentError", () => Effect.void),
-                  Effect.catchTag("NotFound", () => Effect.void),
-                )
+              ? Effect.gen(function* () {
+                  const order = yield* orders.find(orderId);
+                  yield* track(
+                    "judgment_failed",
+                    { order_id: orderId, reason: message, ...(Option.isSome(order) ? { site: order.value.siteKey } : {}) },
+                    Option.isSome(order) ? { distinctId: order.value.customerId } : undefined,
+                  );
+                  yield* refund(orderId).pipe(
+                    Effect.catchTag("PaymentError", () => Effect.void),
+                    Effect.catchTag("NotFound", () => Effect.void),
+                  );
+                })
               : Effect.void,
           ),
           Effect.as("failed" as const),
+        );
+
+      /** Links a job's spans and LLM generations to the buyer (their visitor id) and the order. */
+      const actorFor = (order: { readonly id: OrderId; readonly customerId: string; readonly siteKey: string }) =>
+        Effect.annotateCurrentSpan({ posthogDistinctId: order.customerId, "order.id": order.id, "order.site": order.siteKey }).pipe(
+          Effect.as({ distinctId: order.customerId, sessionId: null, traceId: order.id }),
         );
 
       /**
@@ -229,6 +244,7 @@ export class Pipeline extends Context.Service<
        */
       const judgeStage = Effect.fn("Pipeline.judge")(function* (orderId: OrderId) {
         const order = yield* orders.get(orderId);
+        const actor = yield* actorFor(order);
         if (order.status === "pending_payment" || TERMINAL_STATUSES.includes(order.status)) return "skipped" as const;
         if (Option.isSome(yield* orders.stagedVerdict(orderId))) return "judged" as const;
         const claimed = yield* orders.claim(orderId, Date.now() - CLAIM_STALE_MS);
@@ -302,6 +318,7 @@ export class Pipeline extends Context.Service<
           Effect.tapCause((cause) =>
             Cause.hasDies(cause) ? orders.release(orderId, token) : Effect.void,
           ),
+          Effect.provideService(AnalyticsActor, actor),
         );
       });
 
@@ -312,6 +329,7 @@ export class Pipeline extends Context.Service<
        */
       const placeStage = Effect.fn("Pipeline.place")(function* (orderId: OrderId) {
         const order = yield* orders.get(orderId);
+        const actor = yield* actorFor(order);
         if (order.status === "pending_payment" || TERMINAL_STATUSES.includes(order.status)) return;
         const existing = yield* board.judgmentForOrder(orderId);
         if (Option.isSome(existing)) {
@@ -324,7 +342,9 @@ export class Pipeline extends Context.Service<
         }
         const { verdict, model, pagesCrawled, ogImage } = staged.value;
         const flagged = verdict.contentFlag !== "none";
-        const { tieOrder, duels } = flagged ? { tieOrder: [], duels: [] } : yield* tiebreak(orderId, order.siteKey, verdict);
+        const { tieOrder, duels } = flagged
+          ? { tieOrder: [], duels: [] }
+          : yield* tiebreak(orderId, order.siteKey, verdict).pipe(Effect.provideService(AnalyticsActor, actor));
         const placement: PlacementResult = yield* board.commitPlacement({
           orderId,
           siteKey: order.siteKey,
@@ -343,6 +363,23 @@ export class Pipeline extends Context.Service<
           rank: placement.rank,
           roll: placement.roll,
         });
+        yield* track(
+          "judgment_completed",
+          {
+            order_id: orderId,
+            site: placement.siteKey,
+            kind: order.kind,
+            score: placement.score,
+            rank: placement.rank,
+            roll: placement.roll,
+            model,
+            listed: !flagged,
+            content_flag: verdict.contentFlag,
+            duels: duels.length,
+            manipulation_attempt: verdict.manipulationAttempt,
+          },
+          { distinctId: order.customerId },
+        );
       });
 
       const judgeJob = (orderId: OrderId) =>

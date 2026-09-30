@@ -139,6 +139,8 @@ export const startJevboard = async (): Promise<Jevboard> => {
   // The deployed PUBLIC_URL would send redirects and share links to production; without
   // it the app uses the request's own origin, i.e. this harness.
   delete config.vars?.["PUBLIC_URL"];
+  // No analytics or tracing from tests (and no outbound calls to PostHog).
+  delete config.vars?.["POSTHOG_TOKEN"];
   // The harness crawls with plain HTTP; Browser Run is a remote binding that needs an account.
   delete config.browser;
   writeFileSync(configPath, JSON.stringify(config));

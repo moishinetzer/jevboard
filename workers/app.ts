@@ -3,7 +3,9 @@ import { createRequestHandler, RouterContextProvider } from "react-router";
 import type { Env, JudgmentJob } from "../app/.server/cloudflare/env";
 import { handleQueueBatch } from "../app/.server/cloudflare/jobs";
 import { runMaintenance } from "../app/.server/flows/maintenance";
+import { flushTelemetry } from "../app/.server/observability";
 import { runtime } from "../app/.server/runtime";
+import { proxyPostHog } from "./posthog-proxy";
 
 const requestHandler = createRequestHandler(
   () => import("virtual:react-router/server-build"),
@@ -30,6 +32,9 @@ const canonicalRedirect = (request: Request, env: Env): Response | undefined => 
   return undefined;
 };
 
+/** Sends buffered spans and analytics once the work is done (never throws). */
+const flush = (): Promise<void> => runtime.runPromise(flushTelemetry).catch(() => undefined);
+
 /**
  * The Ranked by Jev Worker:
  * - fetch: React Router (loaders/actions run Effect programs on the shared runtime)
@@ -37,15 +42,20 @@ const canonicalRedirect = (request: Request, env: Env): Response | undefined => 
  * - scheduled: every-minute maintenance (payment sweeper, stalled-job recovery, refunds)
  */
 export default {
-  fetch(request: Request, env: Env, _ctx: ExecutionContext) {
-    return canonicalRedirect(request, env) ?? requestHandler(request, new RouterContextProvider());
+  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    const proxied = proxyPostHog(request, env);
+    if (proxied) return proxied;
+    const response = canonicalRedirect(request, env) ?? (await requestHandler(request, new RouterContextProvider()));
+    ctx.waitUntil(flush());
+    return response;
   },
 
-  async queue(batch: MessageBatch<JudgmentJob>, _env: Env, _ctx: ExecutionContext) {
+  async queue(batch: MessageBatch<JudgmentJob>, _env: Env, ctx: ExecutionContext) {
     await runtime.runPromise(handleQueueBatch(batch));
+    ctx.waitUntil(flush());
   },
 
   scheduled(_controller: ScheduledController, _env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(runtime.runPromise(runMaintenance));
+    ctx.waitUntil(runtime.runPromise(runMaintenance).finally(flush));
   },
 };

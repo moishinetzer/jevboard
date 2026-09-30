@@ -4,6 +4,7 @@ import { Board } from "../services/Board";
 import { JudgmentQueue } from "../services/JudgmentQueue";
 import { Orders } from "../services/Orders";
 import { Payments } from "../services/Payments";
+import { track } from "../services/Analytics";
 
 /** Everything the judging page (/judging/:orderId) renders. */
 export interface JudgingView {
@@ -91,7 +92,13 @@ export const loadJudging = Effect.fn("loadJudging")(function* (orderId: string) 
       ),
     );
     if (paid === "paid") {
-      yield* orders.markPaid(order.id);
+      if (yield* orders.markPaid(order.id)) {
+        yield* track(
+          "payment_confirmed",
+          { order_id: order.id, site: order.siteKey, kind: order.kind, via: "return" },
+          { distinctId: order.customerId },
+        );
+      }
       yield* queue.enqueue(order.id);
       order = yield* orders.get(orderId);
     }

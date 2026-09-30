@@ -78,6 +78,10 @@
     "AUTUMN_API_VERSION": "2.4.0",
     // Public origin for checkout return URLs and share links. Without it they use
     // the request's own origin.
-    "PUBLIC_URL": "https://rankedbyjev.com"
+    "PUBLIC_URL": "https://rankedbyjev.com",
+    // PostHog (EU): analytics, session replay, error tracking, tracing. The
+    // project token is write-only and public (browsers get it too).
+    "POSTHOG_TOKEN": "phc_DhbMqMxbdQKiBRD7d9orbhEfxBW5mTfCKXteoJGaSh2L",
+    "POSTHOG_HOST": "https://eu.i.posthog.com"
   }
 }

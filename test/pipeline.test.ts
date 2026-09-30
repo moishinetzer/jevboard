@@ -1,8 +1,9 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { CustomerId, type OrderId } from "~/.server/domain/ids";
 import { Board } from "~/.server/services/Board";
+import { Analytics } from "~/.server/services/Analytics";
 import { Orders } from "~/.server/services/Orders";
 import { Payments } from "~/.server/services/Payments";
 import { makeRefunder } from "~/.server/services/refunds";
@@ -228,6 +229,31 @@ describe("Pipeline", () => {
       assert.deepStrictEqual(s.refunds, [failed.id]);
       assert.deepStrictEqual(yield* orders.refundsDue(10), []);
     }).pipe(Effect.provide(makeTestLayer(s, ["down.com"])));
+  });
+
+  it.effect("reports the funnel to analytics as the buyer: judged, failed, refunded", () => {
+    const s = script({ scores: { "good.com": [640] }, refunds: [] });
+    const events: Array<{ event: string; distinctId: string | null; properties: Record<string, unknown> }> = [];
+    return Effect.gen(function* () {
+      const judged = yield* judge("good.com");
+      const failed = yield* judge("gone.com");
+      const byEvent = (name: string) => events.filter((event) => event.event === name);
+
+      const [completed] = byEvent("judgment_completed");
+      assert.strictEqual(completed?.distinctId, customer);
+      assert.strictEqual(completed?.properties["order_id"], judged.id);
+      assert.strictEqual(completed?.properties["score"], 640);
+      assert.strictEqual(completed?.properties["rank"], 1);
+
+      const [failure] = byEvent("judgment_failed");
+      assert.strictEqual(failure?.distinctId, customer);
+      assert.strictEqual(failure?.properties["order_id"], failed.id);
+      assert.strictEqual(failure?.properties["site"], "gone.com");
+
+      const [refund] = byEvent("refund_issued");
+      assert.strictEqual(refund?.distinctId, customer);
+      assert.strictEqual(refund?.properties["order_id"], failed.id);
+    }).pipe(Effect.provide(Layer.mergeAll(makeTestLayer(s, ["gone.com"]), Analytics.layerRecording(events))));
   });
 
   it.effect("an unpaid order that fails owes no refund", () => {

@@ -11,6 +11,7 @@ import {
   VERDICT_JSON_SCHEMA,
 } from "~/.server/services/judge/OpenRouterJudge";
 import { DUEL_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT } from "~/.server/services/judge/prompts";
+import { Analytics, AnalyticsActor } from "~/.server/services/Analytics";
 
 // ---------------------------------------------------------------------------
 // A fake OpenRouter behind a fake HttpClient: records every request and
@@ -185,6 +186,31 @@ describe("OpenRouterJudge request", () => {
     assert.strictEqual(schema.additionalProperties, false);
     assert.sameMembers(schema.required, Object.keys(schema.properties));
   });
+});
+
+describe("OpenRouterJudge LLM analytics", () => {
+  it.effect("records each call as a $ai_generation for the order's trace, without prompts or answers", () =>
+    Effect.gen(function* () {
+      const events: Array<{ event: string; distinctId: string | null; properties: Record<string, unknown> }> = [];
+      const api = fakeOpenRouter(() => ok);
+      yield* Judge.use((judge) => judge.judge(judgeInput)).pipe(
+        Effect.provideService(AnalyticsActor, { distinctId: "cBuyer", sessionId: null, traceId: "oOrder1" }),
+        Effect.provide(Layer.mergeAll(jevLayer(api.layer), Analytics.layerRecording(events))),
+      );
+      const [generation] = events;
+      assert.strictEqual(generation?.event, "$ai_generation");
+      assert.strictEqual(generation?.distinctId, "cBuyer");
+      assert.strictEqual(generation?.properties["$ai_trace_id"], "oOrder1");
+      assert.strictEqual(generation?.properties["$ai_model"], "acme/cheap-model-20260901");
+      assert.strictEqual(generation?.properties["$ai_provider"], "openrouter");
+      assert.strictEqual(generation?.properties["$ai_input_tokens"], 5_000);
+      assert.strictEqual(generation?.properties["$ai_output_tokens"], 700);
+      assert.strictEqual(generation?.properties["$ai_total_cost_usd"], 0.0012);
+      assert.strictEqual(generation?.properties["$ai_is_error"], false);
+      assert.isUndefined(generation?.properties["$ai_input"]);
+      assert.isUndefined(generation?.properties["$ai_output_choices"]);
+    }),
+  );
 });
 
 describe("OpenRouterJudge verdicts", () => {
