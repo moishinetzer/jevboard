@@ -1,6 +1,7 @@
 import { Context, Effect, Layer } from "effect";
 
-export type RateLimitBucket = "visitor" | "ip";
+/** "preview" is one site-wide budget for uncached onboarding previews (PREVIEW_LIMITER). */
+export type RateLimitBucket = "visitor" | "ip" | "preview";
 
 /**
  * Submission rate limiting: every submission triggers an outbound

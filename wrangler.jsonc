@@ -31,7 +31,9 @@
         "queue": "jevboard-judgments",
         "max_batch_size": 1,
         "max_batch_timeout": 1,
-        "max_concurrency": 10,
+        // Each judgment is mostly waiting (crawl, then one model call), so a busy
+        // hour can run many at once: about 50 a minute at this setting.
+        "max_concurrency": 50,
         "max_retries": 5
       },
       {
@@ -63,7 +65,11 @@
   // Submission rate limits (each submission triggers an outbound reachability check).
   "ratelimits": [
     { "name": "VISITOR_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
-    { "name": "IP_LIMITER", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } }
+    { "name": "IP_LIMITER", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } },
+    // Site-wide ceiling on uncached onboarding previews (a crawl and a model call each).
+    // Far above real traffic (7,200 new sites an hour); it only bounds abuse. Hitting it
+    // never blocks a sale: the visitor skips straight to the pay step.
+    { "name": "PREVIEW_LIMITER", "namespace_id": "1003", "simple": { "limit": 120, "period": 60 } }
   ],
 
   // Non-secret config. Secrets: `wrangler secret put OPENROUTER_API_KEY` /

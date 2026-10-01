@@ -13,6 +13,7 @@ export interface Env {
   readonly PLACEMENT_QUEUE: Queue<JudgmentJob>;
   readonly VISITOR_LIMITER?: RateLimit;
   readonly IP_LIMITER?: RateLimit;
+  readonly PREVIEW_LIMITER?: RateLimit;
   /** Browser Run, for sites that only render with JavaScript. */
   readonly BROWSER?: BrowserRun;
   /** Sentry: the Worker's project (server errors). Unset: Sentry is off. */

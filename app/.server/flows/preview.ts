@@ -17,7 +17,7 @@ const CRAWL_BUDGET = "25 seconds";
 /** Extra pages are a bonus: whatever loaded by then is enough. */
 const EXTRA_PAGES_MS = 8_000;
 /** One rate-limit key shared by every uncached preview on the site (see `allowed`). */
-const GLOBAL_KEY = "preview:all";
+const GLOBAL_KEY = "all";
 
 /** Only a bad address is the buyer's to fix; a slow or flaky site just skips ahead to payment. */
 const isBadAddress = (error: CrawlError): boolean =>
@@ -68,7 +68,7 @@ export const previewSite = Effect.fn("previewSite")(function* (rawUrl: string) {
   const allowed =
     (request.visitorIsNew || (yield* limiter.allow("visitor", request.visitorId))) &&
     (yield* limiter.allow("ip", request.clientIp)) &&
-    (yield* limiter.allow("ip", GLOBAL_KEY));
+    (yield* limiter.allow("preview", GLOBAL_KEY));
   if (!allowed) {
     return { ok: false, field: "rate", message: "Jev is reading a lot of sites right now." } satisfies PreviewResult;
   }

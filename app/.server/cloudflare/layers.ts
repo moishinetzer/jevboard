@@ -60,7 +60,7 @@ export const RateLimiterCloudflare = Layer.effect(
     const env = yield* CloudflareEnv;
     return RateLimiter.of({
       allow: (bucket, key) => {
-        const binding = bucket === "visitor" ? env.VISITOR_LIMITER : env.IP_LIMITER;
+        const binding = bucket === "visitor" ? env.VISITOR_LIMITER : bucket === "preview" ? env.PREVIEW_LIMITER : env.IP_LIMITER;
         if (!binding) return Effect.succeed(true);
         return Effect.promise(() => binding.limit({ key: `${bucket}:${key}` })).pipe(
           Effect.map((outcome) => outcome.success),
