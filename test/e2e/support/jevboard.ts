@@ -142,6 +142,9 @@ export const startJevboard = async (): Promise<Jevboard> => {
   delete config.vars?.["PUBLIC_URL"];
   // No analytics or tracing from tests (and no outbound calls to PostHog).
   delete config.vars?.["POSTHOG_TOKEN"];
+  // Test failures aren't production errors.
+  delete config.vars?.["SENTRY_DSN"];
+  delete config.vars?.["SENTRY_BROWSER_DSN"];
   // The harness crawls with plain HTTP; Browser Run is a remote binding that needs an account.
   delete config.browser;
   writeFileSync(configPath, JSON.stringify(config));

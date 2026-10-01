@@ -88,6 +88,10 @@
     // PostHog (EU): analytics, session replay, error tracking, tracing. The
     // project token is write-only and public (browsers get it too).
     "POSTHOG_TOKEN": "phc_DhbMqMxbdQKiBRD7d9orbhEfxBW5mTfCKXteoJGaSh2L",
-    "POSTHOG_HOST": "https://eu.i.posthog.com"
+    "POSTHOG_HOST": "https://eu.i.posthog.com",
+    // Sentry (EU, org "ranked-by-jev"): errors from the Worker and from the browser.
+    // DSNs only identify where to send events; they're public by design.
+    "SENTRY_DSN": "https://538698ed8cb22d7fbb1ae58ee644b295@o4512179582468096.ingest.de.sentry.io/4512179584172112",
+    "SENTRY_BROWSER_DSN": "https://eac84172fc2b90f46452ff919b4efc4a@o4512179582468096.ingest.de.sentry.io/4512179584237648"
   }
 }
