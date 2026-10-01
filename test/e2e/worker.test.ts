@@ -228,6 +228,13 @@ describe("Jevboard Worker (simulated payments, mock Jev)", () => {
     expect(svg).toContain(`· ${score}<`);
     expect(svg).not.toContain("/1000");
 
+    // Logos are our own copies (/icon/<site>), never loaded from the business's server. example.com has none to copy.
+    const icon = await fetch(new URL(`/icon/${SITE}`, jev.baseUrl));
+    expect(icon.status).toBe(404);
+    expect(icon.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    const boardHtml = (await browser.get("/")).html;
+    expect(boardHtml).not.toMatch(new RegExp(`<img[^>]+src="https?://(www\\.)?${SITE.replace(/\./g, "\\.")}`));
+
     const sitemap = await fetch(new URL("/sitemap.xml", jev.baseUrl));
     expect(sitemap.status).toBe(200);
     expect(sitemap.headers.get("Content-Type")).toMatch(/^application\/xml/);
@@ -291,12 +298,17 @@ describe("Jevboard Worker (simulated payments, mock Jev)", () => {
     expect(read).toContain("firstImpression");
 
     const intake = { summary: "Examples for documents.", audiences: ["Writers"], strengths: ["Stable"], note: "", landingUrl: `https://${CANCELLED_SITE}/` };
-    const checkout = await browser.submit("/judge", { url: CANCELLED_SITE, intake: JSON.stringify(intake) });
+    const checkout = await browser.submit("/judge", { url: CANCELLED_SITE, intake: JSON.stringify(intake), from: "start" });
     const orderId = /^\/dev\/checkout\/(\w+)\?/.exec(checkout.path)?.[1] ?? "";
     expect(orderId, `POST /judge → ${checkout.status}`).not.toBe("");
     const order = await jev.order(orderId);
     expect(order?.status).toBe("pending_payment");
     expect(JSON.parse(order?.intakeJson ?? "null")).toMatchObject({ summary: "Examples for documents.", strengths: ["Stable"], note: null });
+
+    // Cancelling goes back to the onboarding's pay step (the tab still holds the answers), not to the board.
+    const cancelHref = /href="(\/start\?[^"]+)"/.exec(checkout.html)?.[1]?.replace(/&amp;/g, "&");
+    expect(cancelHref).toBe(`/start?url=${CANCELLED_SITE}&step=5&cancelled=${orderId}`);
+    expect((await browser.get(cancelHref ?? "/")).status).toBe(200);
   });
 
   it("POST /api/autumn/webhook is a 404 without AUTUMN_WEBHOOK_SECRET", async () => {

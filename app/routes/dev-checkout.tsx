@@ -28,6 +28,18 @@ const safeReturn = (value: string | null, orderId: string): string => {
   }
 };
 
+/** Where "Cancel" goes: the board, or the guided onboarding's pay step. */
+const safeCancel = (value: string | null, orderId: string): string => {
+  const fallback = `/?cancelled=${orderId}`;
+  if (!value) return fallback;
+  try {
+    const url = new URL(value, "http://local");
+    return url.pathname === "/start" && url.searchParams.has("cancelled") ? `${url.pathname}${url.search}` : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
 export const loader = effectLoader("dev-checkout", ({ params, request }: Route.LoaderArgs) =>
   Effect.gen(function* () {
     const payments = yield* Payments;
@@ -36,6 +48,7 @@ export const loader = effectLoader("dev-checkout", ({ params, request }: Route.L
     return {
       order: { id: order.id, siteKey: order.siteKey, kind: order.kind, amountCents: order.amountCents, status: order.status },
       returnTo: safeReturn(new URL(request.url).searchParams.get("return"), order.id),
+      cancelTo: safeCancel(new URL(request.url).searchParams.get("cancel"), order.id),
     };
   }),
 );
@@ -79,7 +92,7 @@ export default function DevCheckout({ loaderData }: Route.ComponentProps) {
                 {navigation.state !== "idle" ? "Paying…" : `Pay ${formatMoney(order.amountCents)} (pretend)`}
               </button>
             </Form>
-            <a href={`/?cancelled=${order.id}`} className="link mt-4 block text-center text-sm">
+            <a href={loaderData.cancelTo} className="link mt-4 block text-center text-sm">
               Cancel and go back
             </a>
           </>

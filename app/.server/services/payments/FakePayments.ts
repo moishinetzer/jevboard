@@ -17,7 +17,7 @@ export const FakePaymentsLive = Layer.effect(
       createCheckout: (input) =>
         Effect.succeed({
           _tag: "Redirect" as const,
-          url: `/dev/checkout/${encodeURIComponent(input.orderId)}?return=${encodeURIComponent(input.successUrl)}`,
+          url: `/dev/checkout/${encodeURIComponent(input.orderId)}?return=${encodeURIComponent(input.successUrl)}&cancel=${encodeURIComponent(input.cancelUrl)}`,
         }),
       confirm: ({ orderId }) =>
         sql<{ orderId: string }>`SELECT order_id FROM fake_payments WHERE order_id = ${orderId}`.pipe(

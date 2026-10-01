@@ -1,13 +1,14 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
-import { Link, useFetcher, useRouteLoaderData } from "react-router";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Link, useFetcher, useLocation, useNavigate, useRouteLoaderData, useSearchParams } from "react-router";
 import type { PreviewResult } from "~/.server/flows/preview";
 import type { SubmitFailure } from "~/.server/flows/submit";
-import { capture, reportExposure } from "~/components/analytics";
+import { capture, recordThisVisitor, reportExposure } from "~/components/analytics";
 import { JevFace } from "~/components/logo";
 import { PayLine, PriceBadge, type Pricing, priceButtonLabel } from "~/components/price-cta";
 import { SiteIcon } from "~/components/ui";
 import { DEFAULT_VARIANTS, FLAGS } from "~/lib/experiments";
 import { normalizeSite } from "~/lib/site-key";
+import { useReloadIfRestoredBusy } from "~/lib/use-restored";
 import type { loader as rootLoader } from "~/root";
 
 export interface TopEntry {
@@ -24,6 +25,64 @@ const MAX_STRENGTHS = 3;
 const TICK_MS = 850;
 const TOP_TINT: Record<number, string> = { 1: "bg-accent/14", 2: "bg-accent/8", 3: "bg-accent/4" };
 
+type PreviewRead = Extract<PreviewResult, { ok: true }>;
+
+/** The buyer's answers so far (steps 2 to 4). */
+interface Answers {
+  readonly summary: string;
+  readonly audiences: ReadonlyArray<string>;
+  readonly strengths: ReadonlyArray<string>;
+  readonly note: string;
+  readonly landing: string | null;
+}
+
+/**
+ * Jev's read and the buyer's answers, kept in the tab (sessionStorage) per
+ * site, so a refresh, the Back button or a cancelled checkout brings them
+ * back as they were. Gone when the tab closes.
+ */
+const savedKey = (siteKey: string) => `rbj:start:${siteKey}`;
+
+const strings = (value: unknown): ReadonlyArray<string> =>
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+
+const loadSaved = (siteKey: string): { read: PreviewRead; answers: Answers } | null => {
+  try {
+    const saved = JSON.parse(window.sessionStorage.getItem(savedKey(siteKey)) ?? "null") as {
+      read?: PreviewRead;
+      answers?: Partial<Record<keyof Answers, unknown>>;
+    } | null;
+    const read = saved?.read;
+    if (!read || read.ok !== true || read.site?.siteKey !== siteKey || !read.profile || !Array.isArray(read.preview?.strengths)) return null;
+    const answers = saved.answers ?? {};
+    return {
+      read,
+      answers: {
+        summary: typeof answers.summary === "string" ? answers.summary : read.preview.summary,
+        audiences: strings(answers.audiences),
+        strengths: strings(answers.strengths).slice(0, MAX_STRENGTHS),
+        note: typeof answers.note === "string" ? answers.note : "",
+        landing: typeof answers.landing === "string" ? answers.landing : null,
+      },
+    };
+  } catch {
+    return null;
+  }
+};
+
+const save = (siteKey: string, read: PreviewRead, answers: Answers) => {
+  try {
+    window.sessionStorage.setItem(savedKey(siteKey), JSON.stringify({ read, answers }));
+  } catch {
+    // Storage is off or full: the flow still works, it just starts over after a reload.
+  }
+};
+
+const stepFrom = (value: string | null): number => {
+  const step = Number(value);
+  return Number.isInteger(step) && step >= 1 && step <= STEPS ? step : 1;
+};
+
 /** "Balloons Online USA - Shop latex, mylar…" → "Balloons Online USA"; the host when that's no better. */
 const shortName = (title: string, fallback: string): string => {
   const first = title.split(/\s*[|:]\s+|\s+[-–—·]\s+|\s*\|\s*/)[0]?.trim() ?? "";
@@ -38,6 +97,10 @@ const shortName = (title: string, fallback: string): string => {
  * 4. Their row among the top three, and where visitors land
  * 5. Pay: Jev's first impression, what they get, the price test's button
  * If Jev can't prepare the questions (busy or failed), it skips to step 5.
+ *
+ * The step lives in the address (/start?url=…&step=3), so the browser's Back
+ * button goes back one step, and the answers are kept in the tab: a refresh
+ * or a cancelled checkout (which returns to step 5) picks up where they left.
  */
 export function GuidedFlow({ url, views, top }: { url: string; views: number; top: ReadonlyArray<TopEntry> }) {
   const preview = useFetcher<PreviewResult>();
@@ -46,7 +109,15 @@ export function GuidedFlow({ url, views, top }: { url: string; views: number; to
   const experiments = shell?.experiments ?? DEFAULT_VARIANTS;
   const pricing: Pricing = { variant: experiments.price, wallet: shell?.wallet ?? "card", views };
 
-  const [step, setStep] = useState(1);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [search] = useSearchParams();
+  const wanted = stepFrom(search.get("step"));
+  const cancelled = search.has("cancelled");
+
+  /** What this tab saved for the site on an earlier load (see `loadSaved`); `ready` once that's been looked up. */
+  const [restored, setRestored] = useState<PreviewRead | null>(null);
+  const [ready, setReady] = useState(false);
   const [ticks, setTicks] = useState(0);
   const [summary, setSummary] = useState("");
   const [audiences, setAudiences] = useState<ReadonlyArray<string>>([]);
@@ -55,10 +126,12 @@ export function GuidedFlow({ url, views, top }: { url: string; views: number; to
   const [landing, setLanding] = useState<string | null>(null);
 
   const normalized = normalizeSite(url);
-  const result = preview.data;
+  const result = preview.data ?? restored;
   const read = result?.ok ? result : null;
   const failed = result && !result.ok ? result : null;
   const skipped = failed !== null && failed.field !== "url";
+  // Steps 2 to 4 need Jev's read: until it's here the buyer waits on step 1, and without it they pay.
+  const step = skipped ? STEPS : read ? wanted : 1;
   const host = read?.site.host ?? (normalized.ok ? normalized.site.host : url);
   const siteKey = read?.site.siteKey ?? (normalized.ok ? normalized.site.siteKey : url);
   const name = read ? shortName(read.profile.title, host) : host;
@@ -66,13 +139,42 @@ export function GuidedFlow({ url, views, top }: { url: string; views: number; to
   const rowTitle = read?.profile.title || name;
   const rowDescription = read?.profile.description || "";
 
-  // Ask Jev once (StrictMode runs effects twice in development).
+  const stepUrl = (to: number) => `/start?url=${encodeURIComponent(url)}${to > 1 ? `&step=${to}` : ""}`;
+  const goTo = (to: number) => void navigate(stepUrl(to), { state: { from: step } });
+  // Back retraces the browser's history when the previous entry is the previous step (so Forward
+  // still works); after a reload or a return from checkout there's no such entry.
+  const goBack = () =>
+    (location.state as { from?: number } | null)?.from === step - 1
+      ? void navigate(-1)
+      : void navigate(stepUrl(step - 1), { replace: true });
+
+  // They gave us a website: record this visit whatever replay sampling decided.
+  useEffect(() => recordThisVisitor("guided"), []);
+
+  // Before the first paint in the browser: pick up what this tab saved for the site.
+  const seeded = useRef(false);
+  useLayoutEffect(() => {
+    const saved = normalized.ok ? loadSaved(normalized.site.siteKey) : null;
+    if (saved) {
+      seeded.current = true;
+      setRestored(saved.read);
+      setSummary(saved.answers.summary);
+      setAudiences(saved.answers.audiences);
+      setStrengths(saved.answers.strengths);
+      setNote(saved.answers.note);
+      setLanding(saved.answers.landing);
+      setTicks(3);
+    }
+    setReady(true);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Ask Jev once (StrictMode runs effects twice in development), unless the tab already has his read.
   const asked = useRef(false);
   useEffect(() => {
-    if (asked.current) return;
+    if (!ready || restored || asked.current) return;
     asked.current = true;
     void preview.submit({ url }, { method: "post", action: "/api/preview" });
-  }, [preview, url]);
+  }, [preview, url, ready, restored]);
 
   useEffect(() => {
     if (step !== 1 || ticks >= 3) return;
@@ -81,25 +183,31 @@ export function GuidedFlow({ url, views, top }: { url: string; views: number; to
   }, [step, ticks]);
 
   // Jev's guesses become the starting answers, once.
-  const seeded = useRef(false);
   useEffect(() => {
     if (!result || seeded.current) return;
     seeded.current = true;
-    if (result.ok) {
-      setSummary(result.preview.summary);
-      setAudiences(result.preview.audiences.filter((item) => item.likely).map((item) => item.label));
-      setStrengths(result.preview.strengths.filter((item) => item.picked).map((item) => item.label).slice(0, MAX_STRENGTHS));
-      setLanding(result.preview.landingPages[0]?.url ?? null);
-    } else if (result.field !== "url") {
-      setStep(STEPS);
-    }
+    if (!result.ok) return;
+    setSummary(result.preview.summary);
+    setAudiences(result.preview.audiences.filter((item) => item.likely).map((item) => item.label));
+    setStrengths(result.preview.strengths.filter((item) => item.picked).map((item) => item.label).slice(0, MAX_STRENGTHS));
+    setLanding(result.preview.landingPages[0]?.url ?? null);
   }, [result]);
 
+  // Keep the read and the answers in the tab as they change.
   useEffect(() => {
+    if (ready && read && seeded.current) save(read.site.siteKey, read, { summary, audiences, strengths, note, landing });
+  }, [ready, read, summary, audiences, strengths, note, landing]);
+
+  useEffect(() => {
+    if (!ready) return;
     window.scrollTo({ top: 0 });
     capture("onboarding_step_viewed", { step, site: siteKey, skipped });
     if (step === STEPS) reportExposure(FLAGS.price, experiments.assigned.price);
-  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [step, ready]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (ready && cancelled) capture("checkout_cancelled", { site: siteKey, flow: "guided" });
+  }, [ready, cancelled]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggle = (list: ReadonlyArray<string>, item: string, max: number): ReadonlyArray<string> =>
     list.includes(item) ? list.filter((value) => value !== item) : list.length >= max ? list : [...list, item];
@@ -107,6 +215,8 @@ export function GuidedFlow({ url, views, top }: { url: string; views: number; to
   const intake = read ? JSON.stringify({ summary, audiences, strengths, note, landingUrl: landing }) : "";
   const readyToConfirm = read !== null && ticks >= 3;
   const checkoutBusy = checkout.state !== "idle";
+  // Back from checkout, a page the browser kept in memory would still say "Opening checkout…".
+  useReloadIfRestoredBusy(checkoutBusy);
   const checkoutError = checkout.data && checkout.data.ok === false ? checkout.data : null;
 
   const row = (
@@ -160,7 +270,7 @@ export function GuidedFlow({ url, views, top }: { url: string; views: number; to
         </Link>
       ) : (
         <>
-          <button type="button" disabled={!readyToConfirm} onClick={() => setStep(2)} className="btn h-14 w-full text-[17px]">
+          <button type="button" disabled={!readyToConfirm} onClick={() => goTo(2)} className="btn h-14 w-full text-[17px]">
             {readyToConfirm ? "Yes, that's us" : "Jev is reading…"}
           </button>
           <Link to="/#add" className="btn btn-ghost h-12 w-full text-[15px]">
@@ -195,7 +305,7 @@ export function GuidedFlow({ url, views, top }: { url: string; views: number; to
       </>
     );
     cta = (
-      <button type="button" onClick={() => setStep(3)} className="btn h-14 w-full text-[17px]">
+      <button type="button" onClick={() => goTo(3)} className="btn h-14 w-full text-[17px]">
         Continue
       </button>
     );
@@ -245,7 +355,7 @@ export function GuidedFlow({ url, views, top }: { url: string; views: number; to
       </>
     );
     cta = (
-      <button type="button" onClick={() => setStep(4)} className="btn h-14 w-full text-[17px]">
+      <button type="button" onClick={() => goTo(4)} className="btn h-14 w-full text-[17px]">
         Continue
       </button>
     );
@@ -304,13 +414,18 @@ export function GuidedFlow({ url, views, top }: { url: string; views: number; to
       </>
     );
     cta = (
-      <button type="button" onClick={() => setStep(5)} className="btn h-14 w-full text-[17px]">
+      <button type="button" onClick={() => goTo(5)} className="btn h-14 w-full text-[17px]">
         Looks good
       </button>
     );
   } else {
     content = (
       <>
+        {cancelled ? (
+          <p role="status" className="mb-5 rounded-2xl border border-line bg-card px-4 py-3 text-sm">
+            Checkout cancelled. Nothing was charged, and your answers are still here.
+          </p>
+        ) : null}
         {read ? <span className="tag self-start">Ready for Jev</span> : null}
         <Heading className={read ? "mt-3" : ""}>
           Jev's ready to rank <span className="text-accent [overflow-wrap:anywhere]">{name}</span>
@@ -332,7 +447,7 @@ export function GuidedFlow({ url, views, top }: { url: string; views: number; to
                 {item}
               </span>
             ))}
-            <button type="button" onClick={() => setStep(3)} className="link px-1.5 py-1 text-xs">
+            <button type="button" onClick={() => goTo(3)} className="link px-1.5 py-1 text-xs">
               Edit
             </button>
           </div>
@@ -357,6 +472,8 @@ export function GuidedFlow({ url, views, top }: { url: string; views: number; to
     cta = (
       <checkout.Form method="post" action="/judge" className="flex flex-col items-center">
         <input type="hidden" name="url" value={url} />
+        {/* A cancelled checkout comes back here, not to the board. */}
+        <input type="hidden" name="from" value="start" />
         {intake ? <input type="hidden" name="intake" value={intake} /> : null}
         <PriceBadge variant={pricing.variant} className="mb-3" />
         <button type="submit" disabled={checkoutBusy} className="btn h-14 w-full text-[17px]">
@@ -382,7 +499,7 @@ export function GuidedFlow({ url, views, top }: { url: string; views: number; to
               <ChevronLeft />
             </Link>
           ) : (
-            <button type="button" aria-label="Back" onClick={() => setStep(step - 1)} className="-ml-3 grid size-11 place-items-center text-ink">
+            <button type="button" aria-label="Back" onClick={goBack} className="-ml-3 grid size-11 place-items-center text-ink">
               <ChevronLeft />
             </button>
           )}

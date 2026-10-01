@@ -22,6 +22,33 @@ const withPostHog = (use: (posthog: PostHog) => void) => {
   else if (typeof window !== "undefined" && pending.length < 50) pending.push(use);
 };
 
+/** Session replay records this share of visits. Anyone who gives us their website is always recorded (see `recordThisVisitor`). */
+const REPLAY_SAMPLE_RATE = 0.1;
+/** Set in the browser once a visitor has given us a website, so their later visits are recorded too. */
+const ALWAYS_RECORD_KEY = "rbj_always_record";
+
+const alwaysRecorded = (): boolean => {
+  try {
+    return window.localStorage.getItem(ALWAYS_RECORD_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
+
+let recording = false;
+
+/**
+ * Starts the replay whatever sampling (or any other replay control) decided,
+ * for this session and any that follows it on this page (a new one starts
+ * after 30 idle minutes and would otherwise be sampled afresh). Once per page load.
+ */
+const keepRecording = (posthog: PostHog) => {
+  if (recording) return;
+  recording = true;
+  posthog.startSessionRecording(true);
+  posthog.onSessionId(() => posthog.startSessionRecording(true));
+};
+
 /** The SDK, loaded after the page is interactive so it never delays first paint. */
 const loadPostHog = (config: AnalyticsConfig): Promise<PostHog> => {
   loading ??= import("posthog-js").then(({ default: posthog }) => {
@@ -36,9 +63,11 @@ const loadPostHog = (config: AnalyticsConfig): Promise<PostHog> => {
       capture_pageleave: true,
       capture_exceptions: true,
       // Session replay is switched on in the project settings; inputs stay masked.
+      session_recording: { sampleRate: REPLAY_SAMPLE_RATE },
       // Our own API calls carry the PostHog session id, which links server traces to the replay.
       tracing_headers: [window.location.hostname],
     });
+    if (alwaysRecorded()) keepRecording(posthog);
     for (const use of pending.splice(0)) use(posthog);
     return posthog;
   });
@@ -72,4 +101,27 @@ export const reportExposure = (flag: string, assigned: boolean) => {
 /** A product event from the browser, when PostHog is running. */
 export const capture = (event: string, properties?: Record<string, unknown>) => {
   withPostHog((posthog) => posthog.capture(event, properties));
+};
+
+let siteEntered = false;
+
+/**
+ * Records this visitor from now on, sampled or not: call it the moment they
+ * give us a website (`where`: typed into the form, sent, or carried into the
+ * guided flow). Safe to call on every keystroke and before the SDK has loaded
+ * (the call is replayed once it has). The browser remembers, so their later
+ * visits and the trip back from checkout are recorded too.
+ */
+export const recordThisVisitor = (where: "typed" | "submitted" | "guided") => {
+  if (typeof window === "undefined" || siteEntered) return;
+  siteEntered = true;
+  try {
+    window.localStorage.setItem(ALWAYS_RECORD_KEY, "1");
+  } catch {
+    // Private mode: this page is still recorded; later ones fall back to sampling.
+  }
+  withPostHog((posthog) => {
+    keepRecording(posthog);
+    posthog.capture("site_entered", { where });
+  });
 };

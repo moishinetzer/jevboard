@@ -1,6 +1,8 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useFetcher, useNavigate } from "react-router";
 import { normalizeErrorMessage, normalizeSite } from "~/lib/site-key";
+import { useReloadIfRestoredBusy } from "~/lib/use-restored";
+import { recordThisVisitor } from "./analytics";
 import { PayLine, PriceBadge, type Pricing, priceButtonLabel } from "./price-cta";
 
 interface SubmitFailure {
@@ -68,8 +70,22 @@ export function JudgeForm({
   const oneClick = siteUrl !== undefined;
   const text = label ?? (!oneClick ? priceButtonLabel(pricing?.variant ?? "control") : newSite ? `Get ${hostOf(siteUrl)} ranked` : "Rejudge");
 
+  // Back from checkout, a page the browser kept in memory would still say "Checking…".
+  useReloadIfRestoredBusy(busy);
+
+  // Anyone who gives us a website is recorded from that moment (replay is otherwise sampled):
+  // as soon as the field holds a real address, including one the browser filled in or restored.
+  const field = useRef<HTMLInputElement>(null);
+  const noteAddress = (value: string) => {
+    if (normalizeSite(value).ok) recordThisVisitor("typed");
+  };
+  useEffect(() => {
+    if (field.current) noteAddress(field.current.value);
+  }, []);
+
   // Guided: check the address here, then hand it to the onboarding (which does the crawl).
   const startGuided = (event: FormEvent<HTMLFormElement>) => {
+    recordThisVisitor("submitted");
     if (!guided || oneClick) return;
     event.preventDefault();
     const value = String(new FormData(event.currentTarget).get("url") ?? "").trim();
@@ -98,6 +114,7 @@ export function JudgeForm({
             <GlobeIcon />
             <span className="sr-only">Your website</span>
             <input
+              ref={field}
               id="judge-url"
               name="url"
               type="text"
@@ -108,6 +125,7 @@ export function JudgeForm({
               required
               autoFocus={autoFocus}
               defaultValue={failure?.value ?? ""}
+              onChange={(event) => noteAddress(event.currentTarget.value)}
               placeholder="yourbusiness.com"
               aria-invalid={failure?.field === "url" ? true : undefined}
               aria-describedby={failure ? "judge-error" : undefined}

@@ -45,7 +45,11 @@ export const preflightMessage = (error: CrawlError): string => {
  * *before* taking money, creates a pending order and sends the buyer to
  * checkout. Submitting a site that's already on the board is a reroll.
  */
-export const submitSite = Effect.fn("submitSite")(function* (rawUrl: string, rawIntake?: unknown) {
+export const submitSite = Effect.fn("submitSite")(function* (
+  rawUrl: string,
+  rawIntake?: unknown,
+  options?: { readonly guided?: boolean },
+) {
   const request = yield* CurrentRequest;
   const limiter = yield* RateLimiter;
   // Cookie-less requests get no visitor bucket of their own (a fresh id each
@@ -97,7 +101,10 @@ export const submitSite = Effect.fn("submitSite")(function* (rawUrl: string, raw
       orderId: order.id,
       customerId: request.visitorId,
       successUrl: `${request.origin}/judging/${order.id}`,
-      cancelUrl: `${request.origin}/?cancelled=${order.id}`,
+      // The guided onboarding keeps the buyer's answers in their tab: send them back to its pay step.
+      cancelUrl: options?.guided
+        ? `${request.origin}/start?url=${encodeURIComponent(rawUrl.trim().slice(0, 500))}&step=5&cancelled=${order.id}`
+        : `${request.origin}/?cancelled=${order.id}`,
       description: `${Option.isSome(existing) ? "Jev retrial" : "Jev judgment"}: ${site.siteKey}`,
     }),
   );

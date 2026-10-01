@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { redirect } from "react-router";
+import { redirect, type ShouldRevalidateFunctionArgs } from "react-router";
 import { effectLoader } from "~/.server/http";
 import { Board } from "~/.server/services/Board";
 import { BOARD_VIEWS, Views } from "~/.server/services/Views";
@@ -9,8 +9,10 @@ import type { Route } from "./+types/start";
 /**
  * /start?url=acme.com: the guided onboarding (test B). Jev reads the site,
  * the buyer confirms what it does, who it's for and what makes it #1, sees
- * their row, and pays last. The steps run in the browser; Jev's read comes
- * from /api/preview and checkout goes through /judge like the plain form.
+ * their row, and pays last. The steps run in the browser (&step=3 says which
+ * one is showing); Jev's read comes from /api/preview and checkout goes
+ * through /judge like the plain form. A cancelled checkout comes back to
+ * &step=5&cancelled=<order>.
  */
 export const loader = effectLoader("start", ({ request }: Route.LoaderArgs) =>
   Effect.gen(function* () {
@@ -31,6 +33,10 @@ export const loader = effectLoader("start", ({ request }: Route.LoaderArgs) =>
     };
   }),
 );
+
+/** Moving between steps changes the address, not the site: nothing to load again. */
+export const shouldRevalidate = ({ currentUrl, nextUrl }: ShouldRevalidateFunctionArgs) =>
+  currentUrl.searchParams.get("url") !== nextUrl.searchParams.get("url");
 
 export const meta: Route.MetaFunction = () => [
   { title: "Get your ranking | Ranked by Jev" },
