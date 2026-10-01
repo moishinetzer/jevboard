@@ -11,6 +11,17 @@ export const formatMoney = (cents: number): string =>
 
 export const formatCount = (n: number): string => new Intl.NumberFormat("en-US").format(n);
 
+/**
+ * The colour of a score (1 to 1000): yellow for a low one, through lime, to
+ * green for a high one. Lightness and strength come from the theme
+ * (--score-l, --score-c in app.css), so it reads on paper and on dark.
+ */
+export const scoreColor = (score: number): string => {
+  // Yellow up to 400, green from 900: the stretch where most scores fall gets the whole range.
+  const high = Math.max(0, Math.min(1, (score - 400) / 500));
+  return `oklch(var(--score-l) var(--score-c) ${Math.round(100 + high * 48)})`;
+};
+
 /** "3d 4h" style duration for reign lengths. */
 export const formatDuration = (ms: number): string => {
   const totalMinutes = Math.max(0, Math.floor(ms / 60000));

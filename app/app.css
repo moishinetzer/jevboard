@@ -24,6 +24,9 @@
   --accent-hover: #92400e;
   --track: #f1ead6;
   --bad: #b42318;
+  /* Lightness and chroma of a score's colour; its hue runs from yellow to green (scoreColor). */
+  --score-l: 0.56;
+  --score-c: 0.14;
   --gold-bg: #fff7d1;
   --gold-line: #f3d774;
   --silver-bg: #f4f5f7;
@@ -45,6 +48,8 @@
     --accent-hover: #ffd27a;
     --track: #34312a;
     --bad: #ff8a7a;
+    --score-l: 0.84;
+    --score-c: 0.17;
     --gold-bg: rgba(255, 212, 0, 0.09);
     --gold-line: rgba(255, 212, 0, 0.35);
     --silver-bg: rgba(201, 206, 214, 0.08);

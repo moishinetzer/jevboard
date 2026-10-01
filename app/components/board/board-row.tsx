@@ -6,7 +6,7 @@ import { JudgeForm } from "~/components/judge-form";
 import { JevFace, medalFor } from "~/components/logo";
 import { Meter, SiteIcon, ViewsSpark } from "~/components/ui";
 import { goPath } from "~/components/verdict/links";
-import { formatCount, timeAgo } from "~/lib/format";
+import { formatCount, scoreColor, timeAgo } from "~/lib/format";
 import { entryPath } from "~/lib/site-key";
 
 const BREAKDOWN = [
@@ -52,6 +52,11 @@ function usePresence(open: boolean): boolean {
  * or the chevron opens Jev's verdict in place (/s/<site>). Everything the
  * open row shows came with the board, so it opens at once and slides open.
  * The top three are tinted in one colour that fades from #1 to #3.
+ *
+ * Jev's score stays out of the way: with the pointer on a row (or the keyboard
+ * in it) the rank slides up and the score out of 1000 slides in from below,
+ * coloured from yellow (low) to green (high). Touch screens have no hover, so
+ * the opened row states it too.
  */
 export function BoardRow({
   entry,
@@ -74,6 +79,8 @@ export function BoardRow({
   const medal = medalFor(entry.rank);
   const present = usePresence(open);
   const viewCount = details?.totalViews ?? 0;
+  // Rank and score take turns in one cell (so nothing moves around them), each sliding past its edge.
+  const slide = "col-start-1 row-start-1 transition duration-300 ease-out motion-reduce:transition-none";
 
   // A row open on arrival (/s/<site>) is scrolled to straight away; one opened
   // by a click is brought into view once it has finished opening, if needed.
@@ -102,11 +109,24 @@ export function BoardRow({
 
   return (
     <li ref={ref} className={`scroll-mt-6 transition-colors duration-300 ${frame}`}>
-      <div className="relative grid grid-cols-[26px_auto_minmax(0,1fr)_auto] items-center gap-x-2.5 rounded-[inherit] py-3 pr-1.5 pl-1 transition-colors hover:bg-ink/[0.03] sm:grid-cols-[44px_auto_minmax(0,1fr)_auto] sm:gap-x-4 sm:py-3.5 sm:pr-3 sm:pl-2">
+      <div className="group/row relative grid grid-cols-[26px_auto_minmax(0,1fr)_auto] items-center gap-x-2.5 rounded-[inherit] py-3 pr-1.5 pl-1 transition-colors hover:bg-ink/[0.03] sm:grid-cols-[44px_auto_minmax(0,1fr)_auto] sm:gap-x-4 sm:py-3.5 sm:pr-3 sm:pl-2">
         <span
-          className={`text-center font-display text-[15px] font-bold tabular-nums sm:text-xl ${medal ? "text-accent" : "text-soft/45"}`}
+          className={`grid items-center justify-items-center overflow-y-clip text-center font-display text-[15px] font-bold tabular-nums sm:text-xl ${medal ? "text-accent" : "text-soft/45"}`}
         >
-          #{entry.rank}
+          <span
+            className={`${slide} group-has-[:focus-visible]/row:-translate-y-full group-has-[:focus-visible]/row:opacity-0 group-hover/row:-translate-y-full group-hover/row:opacity-0`}
+          >
+            #{entry.rank}
+          </span>
+          <span
+            aria-hidden
+            style={{ color: scoreColor(entry.score) }}
+            className={`${slide} flex translate-y-full flex-col items-center text-[13px] leading-none opacity-0 group-has-[:focus-visible]/row:translate-y-0 group-has-[:focus-visible]/row:opacity-100 group-hover/row:translate-y-0 group-hover/row:opacity-100 sm:text-[17px]`}
+          >
+            {entry.score}
+            <span className="mt-0.5 font-sans text-[9px] font-semibold opacity-75 sm:text-[10px]">/1000</span>
+          </span>
+          <span className="sr-only">{`, scored ${entry.score} out of 1000`}</span>
         </span>
         <SiteIcon host={entry.host} iconUrl={entry.iconUrl} className={ICON_SIZE(entry.rank)} />
         <div className="min-w-0">
@@ -197,7 +217,13 @@ function EntryDetails({ entry, details, days }: { entry: BoardEntry; details: Ro
 
       {details.reasoning ? (
         <>
-          <h3 className="mt-3.5 text-xs font-bold first:mt-1 sm:mt-[18px] sm:first:mt-1 sm:text-[13px]">Why Jev put it at #{entry.rank}</h3>
+          <h3 className="mt-3.5 flex items-baseline justify-between gap-3 text-xs font-bold first:mt-1 sm:mt-[18px] sm:first:mt-1 sm:text-[13px]">
+            <span>Why Jev put it at #{entry.rank}</span>
+            <span className="font-semibold tabular-nums" style={{ color: scoreColor(entry.score) }}>
+              {entry.score}
+              <span className="opacity-75">/1000</span>
+            </span>
+          </h3>
           <p className="mt-1 text-sm leading-relaxed text-soft sm:text-[15px]">{details.reasoning}</p>
           <div className="mt-3 grid gap-2 sm:mt-4 sm:grid-cols-2 sm:gap-x-7 sm:gap-y-2.5">
             {BREAKDOWN.map(([key, label]) => (

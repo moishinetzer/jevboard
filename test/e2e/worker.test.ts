@@ -43,7 +43,7 @@ const newVisitor = async () => {
 const submitForCheckout = async (browser: Browser, fields: { readonly url: string }) => {
   const checkout = await browser.submit("/judge", fields);
   // A failed preflight (e.g. no network) answers 400 with the reason in the body.
-  expect(checkout.redirects[0], `POST /judge → ${checkout.status} ${checkout.html.slice(0, 200)}`).toMatch(
+  expect(checkout.redirects[0] ?? "", `POST /judge → ${checkout.status} ${checkout.html.slice(0, 200)}`).toMatch(
     /^\/dev\/checkout\/\w+\?return=/,
   );
   expect(checkout.status).toBe(200);
@@ -113,7 +113,7 @@ describe("Jevboard Worker (simulated payments, mock Jev)", () => {
     expect(verdict.score).toBeLessThanOrEqual(1000);
     expect(verdict.rolls).toBe(1);
 
-    // On the home page: a board row (<li>) linking to the verdict and to the site. No score on the row.
+    // On the home page: a board row (<li>) linking to the verdict and to the site.
     const board = await browser.get("/");
     const rows = board.html
       .split("<li")
@@ -122,7 +122,9 @@ describe("Jevboard Worker (simulated payments, mock Jev)", () => {
       .filter((row) => row.includes(`href="/s/${SITE}"`));
     expect(rows.length, "board rows linking to the verdict").toBeGreaterThan(0);
     expect(rows.some((row) => row.includes(`href="/go/${SITE}"`))).toBe(true);
-    expect(rows.some((row) => row.includes(`>${verdict.score}<`))).toBe(false);
+    // The score is on the row out of 1000, tucked behind the rank (it slides in on hover), and the header counts the board.
+    expect(board.html).toContain(`, scored ${verdict.score} out of 1000`);
+    expect(board.html).toMatch(/>\d+ business(es)? ranked</);
   });
 
   it("only the submitter sees the Rejudge button on their business", async () => {

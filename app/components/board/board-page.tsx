@@ -37,7 +37,7 @@ export function BoardPage({ data }: { data: BoardPageData }) {
 
   return (
     <>
-      <HomeHeader views={data.totalViews} />
+      <HomeHeader views={data.totalViews} ranked={listing.total} />
       <main className="flex w-full flex-col items-center px-4">
         <Notices data={data} />
 

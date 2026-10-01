@@ -5,19 +5,25 @@ import { JevFace, Wordmark } from "./logo";
 /** Below this many views, the "Live" pill stays hidden rather than look lonely. */
 const LIVE_PILL_MIN_VIEWS = 25;
 
-/** The board's header: the logo, centred, and a quiet "Live" pill once people are looking. */
-export function HomeHeader({ views }: { views: number }) {
+/**
+ * The board's header: the logo, centred, and a quiet "Live" pill with how many
+ * businesses Jev has ranked and, once people are looking, how many views.
+ */
+export function HomeHeader({ views, ranked }: { views: number; ranked: number }) {
+  const showViews = views >= LIVE_PILL_MIN_VIEWS;
   return (
     <header className="flex flex-col items-center gap-3 px-4 pt-7 sm:gap-3.5 sm:pt-10">
       <Link to="/" aria-label="Ranked by Jev home" className="flex items-center gap-2 text-ink">
         <JevFace size={34} label="" className="size-7 sm:size-[34px]" />
         <Wordmark className="text-[25px] sm:text-[30px]" />
       </Link>
-      {views >= LIVE_PILL_MIN_VIEWS ? (
+      {ranked > 0 || showViews ? (
         <p className="flex items-center gap-2 rounded-full bg-pill py-1 pr-3 pl-1.5 text-xs text-soft sm:text-[13px]">
           <span className="rounded-full bg-jev px-2 py-0.5 text-[10px] font-bold text-on-jev sm:text-[11px]">Live</span>
+          {ranked > 0 ? <span>{`${formatCount(ranked)} ${ranked === 1 ? "business" : "businesses"} ranked`}</span> : null}
+          {ranked > 0 && showViews ? <span aria-hidden>·</span> : null}
           {/* All-time views, labelled "this week": the site runs as a one-week launch. */}
-          <span>{formatCount(views)} views this week</span>
+          {showViews ? <span>{`${formatCount(views)} views this week`}</span> : null}
           <span aria-hidden className="hidden sm:inline">
             ·
           </span>
