@@ -1,6 +1,7 @@
 import { Context, type Effect } from "effect";
 import type { CrawlError } from "../domain/errors";
 import type { SiteSnapshot } from "../domain/models";
+import type { FetchedIcon } from "./crawler/icon";
 
 export interface CrawlOptions {
   /** Maximum number of extra same-site pages to fetch after the homepage. Default 3. */
@@ -37,5 +38,10 @@ export class Crawler extends Context.Service<
     readonly preflight: (url: string) => Effect.Effect<{ readonly finalUrl: string }, CrawlError>;
     /** Full crawl producing the snapshot Jev judges. */
     readonly crawl: (url: string, options?: CrawlOptions) => Effect.Effect<SiteSnapshot, CrawlError>;
+    /**
+     * Downloads a site's icon (the address a crawl found) through the same
+     * guard. Only plain pictures of a sensible size come back; SVG is refused.
+     */
+    readonly fetchIcon: (url: string) => Effect.Effect<FetchedIcon, CrawlError>;
   }
 >()("jevboard/Crawler") {}

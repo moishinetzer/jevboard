@@ -6,6 +6,7 @@ import { CrawlError, PaymentError } from "~/.server/domain/errors";
 import type { SiteSnapshot, Verdict } from "~/.server/domain/models";
 import { Board } from "~/.server/services/Board";
 import { Crawler } from "~/.server/services/Crawler";
+import { Icons } from "~/.server/services/Icons";
 import { Judge } from "~/.server/services/Judge";
 import { Orders } from "~/.server/services/Orders";
 import { Payments } from "~/.server/services/Payments";
@@ -116,6 +117,7 @@ export const FakeCrawler = (unreachable: ReadonlyArray<string> = []) =>
           ? Effect.fail(new CrawlError({ url, reason: "dns", message: "ENOTFOUND" }))
           : Effect.succeed(snapshotFor(host));
       },
+      fetchIcon: (url) => Effect.fail(new CrawlError({ url, reason: "http", message: "HTTP 404", status: 404 })),
     }),
   );
 
@@ -128,12 +130,13 @@ export const makeTestLayer = (
   script: Script,
   unreachable: ReadonlyArray<string> = [],
   payments: Layer.Layer<Payments, never, SqlClient.SqlClient> = RecordingPayments(script),
+  crawler: Layer.Layer<Crawler> = FakeCrawler(unreachable),
 ) => {
-  const repos = Layer.mergeAll(Board.layer, Orders.layer).pipe(Layer.provideMerge(SqliteLocal()));
+  const repos = Layer.mergeAll(Board.layer, Orders.layer, Icons.layer).pipe(Layer.provideMerge(SqliteLocal()));
   return Pipeline.layer.pipe(
     Layer.provideMerge(payments),
     Layer.provideMerge(repos),
-    Layer.provide(Layer.mergeAll(ScriptedJudge(script), FakeCrawler(unreachable))),
+    Layer.provide(Layer.mergeAll(ScriptedJudge(script), crawler)),
     Layer.provideMerge(AppConfig.layerTest()),
   );
 };

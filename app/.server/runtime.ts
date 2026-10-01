@@ -13,6 +13,7 @@ import { TracingLive } from "./observability";
 import { Analytics } from "./services/Analytics";
 import { Board } from "./services/Board";
 import { Experiments } from "./services/Experiments";
+import { Icons } from "./services/Icons";
 import { Previews } from "./services/Previews";
 import { CrawlerCloudflare } from "./cloudflare/crawler";
 import { JudgeLive } from "./services/judge/JudgeLive";
@@ -24,7 +25,7 @@ import { Views } from "./services/Views";
 /**
  * The whole backend as one layer graph, running on Cloudflare Workers:
  *
- *   Worker env ─┬─ D1 (SqlClient, atomic batches) ── Board, Orders, Views ────┐
+ *   Worker env ─┬─ D1 (SqlClient, atomic batches) ── Board, Orders, Views, Icons ─┐
  *               ├─ Crawler ────────────────────────────────────────────────────┼─ Pipeline
  *               ├─ Judge (OpenRouter | mock) ──────────────────────────────────┘
  *               ├─ Payments (Autumn | simulator)
@@ -48,6 +49,7 @@ const Services = Layer.mergeAll(
   RateLimiterCloudflare,
   Views.layer,
   Previews.layer,
+  Icons.layer.pipe(Layer.provide(CrawlerCloudflare)),
   Experiments.layer,
 ).pipe(Layer.provideMerge(Database));
 

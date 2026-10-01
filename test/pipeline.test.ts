@@ -345,9 +345,10 @@ describe("Pipeline", () => {
 
       yield* (yield* Pipeline).place(order.id);
       assert.strictEqual((yield* orders.get(order.id)).status, "complete");
-      // The homepage's own title, description and icon reach the board row.
+      // The homepage's own title and description reach the board row. Its icon only as our own copy
+      // (see icons.test.ts): the address on the business's server never does.
       const placed = Option.getOrThrow(yield* (yield* Board).findBySiteKey("race.com"));
-      assert.deepStrictEqual([placed.siteTitle, placed.siteDescription, placed.iconUrl], [site.title, site.description, site.icon]);
+      assert.deepStrictEqual([placed.siteTitle, placed.siteDescription, placed.iconUrl], [site.title, site.description, null]);
       // Late progress writes from A (or anyone) can't reopen it.
       yield* orders.setStage(order.id, "tiebreaking", "late", a);
       yield* orders.setStage(order.id, "tiebreaking", "late");

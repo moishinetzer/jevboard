@@ -14,6 +14,8 @@ export default [
   route("dev/checkout/:orderId", "routes/dev-checkout.tsx"),
   // Resource routes
   route("go/*", "routes/go.ts"),
+  // Our copies of the businesses' logos
+  route("icon/*", "routes/icon.ts"),
   // Autumn (Svix-signed) payment webhook
   route("api/autumn/webhook", "routes/api.autumn-webhook.ts"),
   // Beacon: a board row was opened in the browser (counts a view)

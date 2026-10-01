@@ -157,3 +157,6 @@ export const entryPath = (siteKey: string): string =>
     .split("/")
     .map((part) => encodeURIComponent(part))
     .join("/")}`;
+
+/** Our copy of a business's logo. `version` changes when the copy does, so browsers can keep it for good. */
+export const iconPath = (siteKey: string, version: number): string => `/icon${entryPath(siteKey).slice(2)}?v=${version}`;

@@ -182,6 +182,7 @@ function layersFor(
               ? Effect.fail(new CrawlError({ url, reason: "dns", message: "ENOTFOUND" }))
               : Effect.succeed(snapshotFor(new URL(url).hostname));
           }),
+        fetchIcon: () => Effect.die("not used"),
       }),
     ),
     Layer.succeed(

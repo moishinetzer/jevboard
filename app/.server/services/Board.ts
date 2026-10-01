@@ -1,5 +1,6 @@
 import { Context, Effect, Layer, Option } from "effect";
 import { SqlClient, type Statement } from "effect/sql";
+import { iconPath } from "~/lib/site-key";
 import { SqlBatch } from "../db/SqlBatch";
 import { NotFound } from "../domain/errors";
 import { type EntryId, type JudgmentId, makeEntryId, makeJudgmentId, type OrderId, randomId } from "../domain/ids";
@@ -45,6 +46,7 @@ interface EntryRow {
   readonly siteTitle: string | null;
   readonly siteDescription: string | null;
   readonly iconUrl: string | null;
+  readonly iconVersion: number | null;
   readonly entryNumber: number;
   readonly clicks: number;
   readonly firstJudgedAt: number;
@@ -130,7 +132,8 @@ const toBoardEntry = (row: RankedEntryRow): BoardEntry => ({
   ogImage: row.ogImage,
   siteTitle: row.siteTitle || null,
   siteDescription: row.siteDescription || null,
-  iconUrl: row.iconUrl || null,
+  // Our own copy of the logo (see Icons), never the address on the business's server.
+  iconUrl: row.iconVersion ? iconPath(row.siteKey, row.iconVersion) : null,
   entryNumber: row.entryNumber,
   clicks: row.clicks,
   firstJudgedAt: row.firstJudgedAt,
@@ -277,6 +280,12 @@ export class Board extends Context.Service<
     readonly withoutSiteProfile: (limit: number) => Effect.Effect<ReadonlyArray<{ readonly id: EntryId; readonly url: string }>>;
     /** Stores what a business's homepage says about it (null: it couldn't be read; don't try again). */
     readonly setSiteProfile: (id: EntryId, profile: SiteProfile | null) => Effect.Effect<void>;
+    /** Visible entries whose icon was never copied (see Icons), oldest first, with the address the crawl found. */
+    readonly withoutIcon: (
+      limit: number,
+    ) => Effect.Effect<ReadonlyArray<{ readonly id: EntryId; readonly siteKey: string; readonly iconUrl: string | null }>>;
+    /** Records the copy's version for an entry (0: it has no usable icon; don't try again). */
+    readonly setIconVersion: (id: EntryId, version: number) => Effect.Effect<void>;
     /** Jev's reasoning behind each entry's current verdict, by entry id (at most 100 ids). */
     readonly reasoning: (entryIds: ReadonlyArray<EntryId>) => Effect.Effect<ReadonlyMap<EntryId, string>>;
     readonly judgment: (id: string) => Effect.Effect<Option.Option<Judgment>>;
@@ -436,6 +445,9 @@ export class Board extends Context.Service<
             SELECT id, site_key FROM entries WHERE hidden = 0
             ORDER BY score DESC, tie_rank ASC, first_judged_at ASC LIMIT 1`)[0];
           const kingBefore = kingBeforeRow?.id ?? null;
+          // The judging stage copied the site's icon (Icons); the row points at that copy.
+          const iconVersion =
+            (yield* sql<{ createdAt: number }>`SELECT created_at FROM site_icons WHERE site_key = ${input.siteKey}`)[0]?.createdAt ?? null;
           const previousRank = existing && existing.hidden === 0 ? yield* rankOf(existing.id) : null;
           const [numbers] = yield* sql<{ nextEntry: number; nextSerial: number }>`
             SELECT (SELECT COALESCE(MAX(entry_number), 0) + 1 FROM entries) AS next_entry,
@@ -488,6 +500,7 @@ export class Board extends Context.Service<
                 site_title = COALESCE(${input.site?.title || null}, site_title),
                 site_description = COALESCE(${input.site?.description || null}, site_description),
                 icon_url = CASE WHEN ${input.site ? 1 : 0} = 1 THEN ${input.site?.icon ?? null} ELSE icon_url END,
+                icon_version = COALESCE(${iconVersion}, icon_version),
                 site_checked_at = CASE WHEN ${input.site ? 1 : 0} = 1 THEN ${now} ELSE site_checked_at END
               WHERE id = ${entryId}`);
           } else {
@@ -515,6 +528,7 @@ export class Board extends Context.Service<
               siteTitle: input.site?.title || null,
               siteDescription: input.site?.description || null,
               iconUrl: input.site?.icon ?? null,
+              iconVersion,
               siteCheckedAt: input.site ? now : null,
               entryNumber: numbers?.nextEntry ?? 1,
               clicks: 0,
@@ -729,6 +743,17 @@ export class Board extends Context.Service<
           WHERE id = ${id}`;
       }, Effect.orDie);
 
+      const withoutIcon = Effect.fn("Board.withoutIcon")(function* (limit: number) {
+        const rows = yield* sql<{ readonly id: string; readonly siteKey: string; readonly iconUrl: string | null }>`
+          SELECT id, site_key, icon_url FROM entries WHERE icon_version IS NULL AND hidden = 0
+          ORDER BY first_judged_at ASC LIMIT ${limit}`;
+        return rows.map((row) => ({ id: row.id as EntryId, siteKey: row.siteKey, iconUrl: row.iconUrl || null }));
+      }, Effect.orDie);
+
+      const setIconVersion = Effect.fn("Board.setIconVersion")(function* (id: EntryId, version: number) {
+        yield* sql`UPDATE entries SET icon_version = ${version} WHERE id = ${id}`;
+      }, Effect.orDie);
+
       const reasoning = Effect.fn("Board.reasoning")(function* (entryIds: ReadonlyArray<EntryId>) {
         if (entryIds.length === 0) return new Map<EntryId, string>();
         const rows = yield* sql<{ readonly id: string; readonly reasoning: string }>`
@@ -822,6 +847,8 @@ export class Board extends Context.Service<
         judgments,
         withoutSiteProfile,
         setSiteProfile,
+        withoutIcon,
+        setIconVersion,
         reasoning,
         judgment,
         events,

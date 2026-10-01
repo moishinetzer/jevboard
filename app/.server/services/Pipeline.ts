@@ -4,6 +4,7 @@ import type { OrderId } from "../domain/ids";
 import { type DuelContender, siteProfileOf, TERMINAL_STATUSES, type Verdict } from "../domain/models";
 import { Board, type DuelRecord, type PlacementResult } from "./Board";
 import { Crawler } from "./Crawler";
+import { Icons } from "./Icons";
 import { Judge } from "./Judge";
 import { AnalyticsActor, track } from "./Analytics";
 import { Orders } from "./Orders";
@@ -117,6 +118,7 @@ export class Pipeline extends Context.Service<
       const orders = yield* Orders;
       const board = yield* Board;
       const crawler = yield* Crawler;
+      const icons = yield* Icons;
       const judge = yield* Judge;
       const refund = makeRefunder(orders, yield* Payments);
       // Serializes placements for the in-process runner; on Cloudflare the placement queue does.
@@ -258,6 +260,8 @@ export class Pipeline extends Context.Service<
           // pass later goes back to the queue (see the catch below).
           // Paid: a JavaScript-only site that can't be rendered right now is retried (then refunded), never judged blank.
           const snapshot = yield* crawler.crawl(order.url, { requireRender: true });
+          // The row's logo is copied now and served from our own address; a site without one is fine.
+          yield* icons.copy(order.siteKey, snapshot.favicon);
           const pageList = snapshot.pages.map((page) => new URL(page.url).pathname).join(", ");
           const roll = (yield* board.rollsFor(order.siteKey)) + 1;
           yield* orders.setStage(

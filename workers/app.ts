@@ -1,9 +1,10 @@
 import type { ExecutionContext, ExportedHandler, MessageBatch, ScheduledController } from "@cloudflare/workers-types";
 import * as Sentry from "@sentry/cloudflare";
+import { Effect } from "effect";
 import { createRequestHandler, RouterContextProvider } from "react-router";
 import type { Env, JudgmentJob } from "../app/.server/cloudflare/env";
 import { handleQueueBatch } from "../app/.server/cloudflare/jobs";
-import { backfillSiteProfiles, runMaintenance } from "../app/.server/flows/maintenance";
+import { backfillIcons, backfillSiteProfiles, runMaintenance } from "../app/.server/flows/maintenance";
 import { flushTelemetry } from "../app/.server/observability";
 import { reportServerError } from "../app/.server/report";
 import { runtime } from "../app/.server/runtime";
@@ -42,7 +43,7 @@ const flush = (): Promise<void> => runtime.runPromise(flushTelemetry).catch(() =
  * - fetch: React Router (loaders/actions run Effect programs on the shared runtime)
  * - queue: paid judgments (crawl + verdict) and serialized placements
  * - scheduled: every-minute maintenance (payment sweeper, stalled-job recovery, refunds,
- *   homepage profiles for older entries)
+ *   homepage profiles and logo copies for older entries)
  */
 const handler = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
@@ -59,9 +60,13 @@ const handler = {
   },
 
   scheduled(_controller: ScheduledController, _env: Env, ctx: ExecutionContext) {
-    // The two run independently: a failing crawl never holds up payments or refunds.
+    // Each runs independently: a failing crawl never holds up payments or refunds.
     ctx.waitUntil(
-      Promise.allSettled([runtime.runPromise(runMaintenance), runtime.runPromise(backfillSiteProfiles)])
+      Promise.allSettled([
+        runtime.runPromise(runMaintenance),
+        // Profiles first: an older entry's icon address comes from its profile.
+        runtime.runPromise(Effect.andThen(backfillSiteProfiles, backfillIcons)),
+      ])
         .then((results) => {
           for (const result of results) if (result.status === "rejected") reportServerError(result.reason, { cron: "maintenance" });
         })

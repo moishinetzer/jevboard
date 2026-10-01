@@ -1,6 +1,7 @@
 import { Duration, Effect } from "effect";
 import { CrawlError } from "../../domain/errors";
 import { decodeHtml, isHtmlContentType, looksLikeHtml } from "./html";
+import { type FetchedIcon, MAX_ICON_BYTES, sniffImageType } from "./icon";
 import { guardHost, hopViolation, type Resolver } from "./ssrf";
 
 export const MAX_REDIRECTS = 5;
@@ -45,10 +46,27 @@ export interface PageFetcherOptions {
 // One HTTP exchange (no redirect following)
 // ---------------------------------------------------------------------------
 
+/** What a request is after: pages and icons share the guard, the redirects and the size cap. */
+interface Wanted {
+  readonly accept: string;
+  /** For error messages: "an HTML page", "an image". */
+  readonly what: string;
+  /** Whether a declared content type is worth downloading. */
+  readonly accepts: (contentType: string) => boolean;
+  readonly maxBytes: number;
+}
+
+const HTML_PAGE: Wanted = {
+  accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5",
+  what: "an HTML page",
+  accepts: isHtmlContentType,
+  maxBytes: MAX_BODY_BYTES,
+};
+
 type Hop =
   | { readonly _tag: "Redirect"; readonly status: number; readonly location: string | undefined }
   | { readonly _tag: "Status"; readonly status: number }
-  | { readonly _tag: "NotHtml"; readonly contentType: string }
+  | { readonly _tag: "WrongType"; readonly contentType: string }
   | {
       readonly _tag: "Body";
       readonly contentType: string | undefined;
@@ -101,6 +119,7 @@ const sendHop = async (
   send: HttpFetch,
   url: URL,
   headers: Record<string, string>,
+  wanted: Wanted,
   signal: AbortSignal,
 ): Promise<Hop> => {
   // `redirect: "manual"` hands us the 3xx itself (Node and workerd; not browsers).
@@ -115,11 +134,11 @@ const sendHop = async (
     return { _tag: "Status", status };
   }
   const contentType = response.headers.get("content-type")?.trim() || undefined;
-  if (contentType !== undefined && !isHtmlContentType(contentType)) {
+  if (contentType !== undefined && !wanted.accepts(contentType)) {
     discard(response);
-    return { _tag: "NotHtml", contentType };
+    return { _tag: "WrongType", contentType };
   }
-  const { bytes, truncated } = await readCapped(response.body, MAX_BODY_BYTES);
+  const { bytes, truncated } = await readCapped(response.body, wanted.maxBytes);
   return { _tag: "Body", contentType, bytes, truncated };
 };
 
@@ -206,23 +225,31 @@ const parseUrl = (href: string, base?: URL): URL | undefined => {
 // The guarded fetch
 // ---------------------------------------------------------------------------
 
+interface Fetched {
+  /** URL after redirects (fragment dropped). */
+  readonly url: string;
+  readonly contentType: string | undefined;
+  readonly bytes: Uint8Array;
+  readonly truncated: boolean;
+}
+
 /**
- * Builds `fetchPage(url, timeout)`: GETs an HTML page, following up to
- * `MAX_REDIRECTS` redirects by hand so every hop goes through the SSRF guard
- * again. The whole chain (DNS checks included) shares one deadline. Failures
- * are `CrawlError`s whose `url` is always the URL that was asked for; HTTP
- * failures carry the `status`. One attempt only: retrying is the caller's call.
+ * One guarded GET: follows up to `MAX_REDIRECTS` redirects by hand so every
+ * hop goes through the SSRF guard again. The whole chain (DNS checks
+ * included) shares one deadline. Failures are `CrawlError`s whose `url` is
+ * always the URL that was asked for; HTTP failures carry the `status`. One
+ * attempt only: retrying is the caller's call.
  */
-export const makePageFetcher = (options: PageFetcherOptions) => {
+const makeGuardedGet = (options: PageFetcherOptions, wanted: Wanted) => {
   const send: HttpFetch = options.fetch ?? ((url, init) => fetch(url, init));
   const headers = {
     "user-agent": options.userAgent,
-    accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5",
+    accept: wanted.accept,
     "accept-language": "en-US,en;q=0.9",
   };
 
-  return Effect.fn("Crawler.fetchPage")(
-    function* (requestedUrl: string, _timeout: Duration.Input) {
+  return (requestedUrl: string, timeout: Duration.Input): Effect.Effect<Fetched, CrawlError> =>
+    Effect.gen(function* () {
       const fail = (reason: CrawlError["reason"], message: string) =>
         Effect.fail(new CrawlError({ url: requestedUrl, reason, message }));
       const failHttp = (status: number, message: string) =>
@@ -240,7 +267,7 @@ export const makePageFetcher = (options: PageFetcherOptions) => {
 
         const target = url;
         const hop = yield* Effect.tryPromise({
-          try: (signal) => sendHop(send, target, headers, signal),
+          try: (signal) => sendHop(send, target, headers, wanted, signal),
           catch: (cause) => transportError(requestedUrl, cause),
         });
         switch (hop._tag) {
@@ -253,24 +280,14 @@ export const makePageFetcher = (options: PageFetcherOptions) => {
           }
           case "Status":
             return yield* failHttp(hop.status, `HTTP ${hop.status}`);
-          case "NotHtml":
-            return yield* fail("not-html", `expected an HTML page, got ${hop.contentType}`);
-          case "Body": {
-            if (hop.contentType === undefined && !looksLikeHtml(hop.bytes)) {
-              return yield* fail("not-html", "expected an HTML page, got an untyped non-HTML response");
-            }
-            const page: FetchedPage = {
-              url: url.href,
-              html: decodeHtml(hop.bytes, hop.contentType),
-              truncated: hop.truncated,
-            };
-            return page;
-          }
+          case "WrongType":
+            return yield* fail("not-html", `expected ${wanted.what}, got ${hop.contentType}`);
+          case "Body":
+            return { url: url.href, contentType: hop.contentType, bytes: hop.bytes, truncated: hop.truncated };
         }
       }
-    },
-    (effect, requestedUrl, timeout) =>
-      Effect.timeoutOrElse(effect, {
+    }).pipe(
+      Effect.timeoutOrElse({
         duration: timeout,
         orElse: () =>
           Effect.fail(
@@ -281,5 +298,50 @@ export const makePageFetcher = (options: PageFetcherOptions) => {
             }),
           ),
       }),
-  );
+    );
+};
+
+/** Builds `fetchPage(url, timeout)`: GETs an HTML page through the guard. Over-long pages are cut, not refused. */
+export const makePageFetcher = (options: PageFetcherOptions) => {
+  const get = makeGuardedGet(options, HTML_PAGE);
+  return Effect.fn("Crawler.fetchPage")(function* (requestedUrl: string, timeout: Duration.Input) {
+    const fetched = yield* get(requestedUrl, timeout);
+    if (fetched.contentType === undefined && !looksLikeHtml(fetched.bytes)) {
+      return yield* new CrawlError({
+        url: requestedUrl,
+        reason: "not-html",
+        message: "expected an HTML page, got an untyped non-HTML response",
+      });
+    }
+    const page: FetchedPage = {
+      url: fetched.url,
+      html: decodeHtml(fetched.bytes, fetched.contentType),
+      truncated: fetched.truncated,
+    };
+    return page;
+  });
+};
+
+/**
+ * Builds `fetchIcon(url, timeout)`: GETs a site's icon through the same
+ * guard. The type comes from the file's first bytes, never from what the
+ * server calls it; anything that isn't a plain picture (SVG included, which
+ * can carry scripts) or is over `MAX_ICON_BYTES` is refused.
+ */
+export const makeIconFetcher = (options: PageFetcherOptions) => {
+  const get = makeGuardedGet(options, {
+    accept: "image/png,image/jpeg,image/webp,image/*;q=0.8",
+    what: "an image",
+    accepts: (contentType) => /^(image\/|application\/octet-stream)/i.test(contentType),
+    maxBytes: MAX_ICON_BYTES,
+  });
+  return Effect.fn("Crawler.fetchIcon")(function* (requestedUrl: string, timeout: Duration.Input) {
+    const fail = (reason: CrawlError["reason"], message: string) => new CrawlError({ url: requestedUrl, reason, message });
+    const fetched = yield* get(requestedUrl, timeout);
+    if (fetched.truncated) return yield* fail("too-large", `the icon is over ${MAX_ICON_BYTES / 1000} KB`);
+    const contentType = sniffImageType(fetched.bytes);
+    if (contentType === null) return yield* fail("not-html", "expected a PNG, JPEG, WebP, GIF or ICO image");
+    const icon: FetchedIcon = { contentType, bytes: fetched.bytes };
+    return icon;
+  });
 };

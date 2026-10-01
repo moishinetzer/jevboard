@@ -233,9 +233,10 @@ export interface BoardEntry {
   readonly manipulationAttempt: boolean;
   readonly subscores: SubScores;
   readonly ogImage: string | null;
-  /** The homepage's own title, description and app icon (null until read, or when it has none). */
+  /** The homepage's own title and description (null until read, or when it has none). */
   readonly siteTitle: string | null;
   readonly siteDescription: string | null;
+  /** Path of our copy of its app icon (/icon/<site>?v=…); null when it has none we could copy. */
   readonly iconUrl: string | null;
   /** 1-based order in which entries first joined the board ("Founding Defendant" if <= 100). */
   readonly entryNumber: number;

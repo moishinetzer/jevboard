@@ -3,7 +3,7 @@ import { AppConfig } from "../../config";
 import type { CrawledPage, SiteSnapshot } from "../../domain/models";
 import { CrawlError, isTransientCrawlError } from "../../domain/errors";
 import { Crawler, type CrawlOptions } from "../Crawler";
-import { type FetchedPage, type HttpFetch, isTlsCrawlError, makePageFetcher } from "./fetch";
+import { type FetchedPage, type HttpFetch, isTlsCrawlError, makeIconFetcher, makePageFetcher, type PageFetcherOptions } from "./fetch";
 import { type ExtractedPage, extractPage } from "./html";
 import { pageKey, selectLinks } from "./links";
 import { looksClientRendered, type RenderPage } from "./render";
@@ -56,6 +56,7 @@ const DEFAULT_QUICK_RETRY_BACKOFF = "250 millis";
 const DEFAULT_CRAWL_CEILING = "3 minutes";
 const DEFAULT_PREFLIGHT_TIMEOUT = "8 seconds";
 const DEFAULT_PREFLIGHT_CEILING = "15 seconds";
+const ICON_TIMEOUT = "8 seconds";
 const DEFAULT_EXTRA_PAGES = 3;
 const MAX_EXTRA_PAGES = 10;
 const EXTRA_PAGE_CONCURRENCY = 3;
@@ -189,12 +190,14 @@ export const makeCrawler = (options: CrawlerOptions): Crawler["Service"] => {
   const crawlCeilingMs = Duration.toMillis(Duration.fromInputUnsafe(crawlCeiling));
   const preflightTimeout = options.preflightTimeout ?? DEFAULT_PREFLIGHT_TIMEOUT;
   const preflightCeiling = options.preflightCeiling ?? DEFAULT_PREFLIGHT_CEILING;
-  const fetchPage = makePageFetcher({
+  const fetcherOptions: PageFetcherOptions = {
     userAgent: options.userAgent,
     resolve: options.resolve ?? makeDohResolver(),
     allowPrivateNetwork: options.allowPrivateNetwork === true,
     ...(options.fetch !== undefined ? { fetch: options.fetch } : {}),
-  });
+  };
+  const fetchPage = makePageFetcher(fetcherOptions);
+  const fetchIconOnce = makeIconFetcher(fetcherOptions);
 
   // Worst case with the defaults: 62 s of attempts plus ~3 s of backoff on the
   // address as given, ~33 s on each of two siblings (a dead site fails here,
@@ -365,7 +368,10 @@ export const makeCrawler = (options: CrawlerOptions): Crawler["Service"] => {
     (effect, url) => withCeiling(effect, url, crawlCeiling, "the crawl"),
   );
 
-  return Crawler.of({ preflight, crawl });
+  // One try: an icon is a nicety, and the board has a fallback for a site without one.
+  const fetchIcon = (url: string) => fetchIconOnce(url, ICON_TIMEOUT);
+
+  return Crawler.of({ preflight, crawl, fetchIcon });
 };
 
 /** A crawler layer with explicit options (tests: fake `resolve` or `fetch`, or `allowPrivateNetwork: true`). */

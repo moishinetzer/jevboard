@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import { siteProfileOf } from "../domain/models";
 import { Board } from "../services/Board";
 import { Crawler } from "../services/Crawler";
+import { Icons } from "../services/Icons";
 import { JudgmentQueue } from "../services/JudgmentQueue";
 import { Orders } from "../services/Orders";
 import { Payments } from "../services/Payments";
@@ -90,3 +91,21 @@ export const backfillSiteProfiles = Effect.gen(function* () {
   }
   if (entries.length > 0) yield* Effect.logInfo("Site profiles read", { entries: entries.length });
 }).pipe(Effect.withSpan("maintenance.siteProfiles"));
+
+/** Icons copied per cron run for entries placed before the board kept its own copies. */
+const ICON_BATCH = 3;
+
+/**
+ * Copies the logos of entries placed before the board served its own copies
+ * (new entries get theirs when they're judged). Each entry is tried once: a
+ * site without a usable icon keeps the favicon fallback.
+ */
+export const backfillIcons = Effect.gen(function* () {
+  const board = yield* Board;
+  const icons = yield* Icons;
+  const entries = yield* board.withoutIcon(ICON_BATCH);
+  for (const entry of entries) {
+    yield* board.setIconVersion(entry.id, (yield* icons.copy(entry.siteKey, entry.iconUrl)) ?? 0);
+  }
+  if (entries.length > 0) yield* Effect.logInfo("Icons copied", { entries: entries.length });
+}).pipe(Effect.withSpan("maintenance.icons"));
