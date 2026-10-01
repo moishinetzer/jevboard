@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { data } from "react-router";
 import { previewSite } from "~/.server/flows/preview";
 import { CurrentRequest, effectAction } from "~/.server/http";
@@ -12,8 +12,12 @@ export const action = effectAction("preview", ({ request }: Route.ActionArgs) =>
     if (origin && origin !== new URL(request.url).origin && origin !== (yield* CurrentRequest).origin) {
       return data({ ok: false, field: "rate", message: "Ask from rankedbyjev.com itself, please." }, { status: 403 });
     }
-    const form = yield* Effect.promise(() => request.formData());
-    return yield* previewSite(String(form.get("url") ?? "").slice(0, 500));
+    // A body that isn't a form is the sender's mistake (400), not ours (500).
+    const form = yield* Effect.tryPromise(() => request.formData()).pipe(Effect.option);
+    if (Option.isNone(form)) {
+      return data({ ok: false, field: "url", message: "Send the address as a form field called url." }, { status: 400 });
+    }
+    return yield* previewSite(String(form.value.get("url") ?? "").slice(0, 500));
   }),
 );
 
