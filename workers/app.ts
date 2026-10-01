@@ -8,32 +8,13 @@ import { backfillIcons, backfillSiteProfiles, runMaintenance } from "../app/.ser
 import { flushTelemetry } from "../app/.server/observability";
 import { reportServerError } from "../app/.server/report";
 import { runtime } from "../app/.server/runtime";
+import { canonicalRedirect } from "./canonical";
 import { proxyPostHog } from "./posthog-proxy";
 
 const requestHandler = createRequestHandler(
   () => import("virtual:react-router/server-build"),
   import.meta.env.MODE,
 );
-
-/**
- * Pages live on one address: www and the old workers.dev host redirect to
- * PUBLIC_URL. API routes (the payment webhook) are never redirected, since
- * webhook senders don't follow redirects.
- */
-const canonicalRedirect = (request: Request, env: Env): Response | undefined => {
-  const url = new URL(request.url);
-  if (url.pathname.startsWith("/api/") || (request.method !== "GET" && request.method !== "HEAD")) return undefined;
-  const publicUrl = typeof env["PUBLIC_URL"] === "string" ? env["PUBLIC_URL"] : undefined;
-  const canonical = publicUrl ? new URL(publicUrl) : undefined;
-  if (url.hostname.startsWith("www.")) {
-    url.hostname = url.hostname.slice(4);
-    return Response.redirect(url.href, 301);
-  }
-  if (canonical && url.hostname.endsWith(".workers.dev") && url.hostname !== canonical.hostname) {
-    return Response.redirect(new URL(url.pathname + url.search, canonical).href, 301);
-  }
-  return undefined;
-};
 
 /** Sends buffered spans and analytics once the work is done (never throws). */
 const flush = (): Promise<void> => runtime.runPromise(flushTelemetry).catch(() => undefined);
@@ -49,7 +30,8 @@ const handler = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const proxied = proxyPostHog(request, env);
     if (proxied) return proxied;
-    const response = canonicalRedirect(request, env) ?? (await requestHandler(request, new RouterContextProvider()));
+    const publicUrl = typeof env["PUBLIC_URL"] === "string" ? env["PUBLIC_URL"] : undefined;
+    const response = canonicalRedirect(request, publicUrl) ?? (await requestHandler(request, new RouterContextProvider()));
     ctx.waitUntil(flush());
     return response;
   },
